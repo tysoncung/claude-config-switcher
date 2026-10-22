@@ -216,7 +216,7 @@ Users can install from the Marketplace, or download the `.vsix` from the
 Releases page and install it:
 
 ```bash
-code --install-extension claude-profile-switcher-1.0.0.vsix
+code --install-extension claude-profile-switcher-1.0.1.vsix
 ```
 
 You can also run the workflow by hand from the **Actions** tab. That builds the
