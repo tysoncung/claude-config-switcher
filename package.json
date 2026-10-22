@@ -5,6 +5,10 @@
   "version": "0.1.0",
   "publisher": "wennalee",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tysoncung/claude-profile-switcher.git"
+  },
   "engines": {
     "vscode": "^1.94.0"
   },
