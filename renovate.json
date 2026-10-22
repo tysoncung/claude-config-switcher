@@ -7,9 +7,13 @@
       "groupName": "GitHub Actions"
     },
     {
-      "matchDepTypes": ["devDependencies"],
+      "matchManagers": ["npm"],
       "matchUpdateTypes": ["minor", "patch"],
-      "groupName": "dev dependencies (non-major)"
+      "groupName": "dependencies (non-major)",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false,
+      "minimumReleaseAge": "3 days"
     }
   ],
   "ignoreDeps": ["@types/vscode"]
