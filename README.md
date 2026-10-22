@@ -1,4 +1,4 @@
-# Claude Code Profile Switcher
+# Claude Config Switcher
 
 A tiny companion VS Code extension that adds the profile-switching feature the
 official Claude Code extension doesn't have. It flips `CLAUDE_CONFIG_DIR` (via
@@ -186,8 +186,8 @@ Package to a `.vsix` and install:
 ```bash
 cd ~/codes/claude-profile-switcher
 pnpm install
-pnpm run package                  # produces claude-profile-switcher-<version>.vsix
-code --install-extension claude-profile-switcher-<version>.vsix
+pnpm run package                  # produces claude-config-switcher-<version>.vsix
+code --install-extension claude-config-switcher-<version>.vsix
 ```
 
 Then reload VS Code. (`vsce` may ask you to set a real `publisher`; any string
@@ -216,7 +216,7 @@ Users can install from the Marketplace, or download the `.vsix` from the
 Releases page and install it:
 
 ```bash
-code --install-extension claude-profile-switcher-1.0.1.vsix
+code --install-extension claude-config-switcher-1.0.2.vsix
 ```
 
 You can also run the workflow by hand from the **Actions** tab. That builds the
