@@ -3,8 +3,12 @@
   "displayName": "Claude Code Profile Switcher",
   "description": "Switch between Claude Code config directories (CLAUDE_CONFIG_DIR) from a status bar item.",
   "version": "1.0.0",
-  "publisher": "wennalee",
+  "publisher": "tysoncung",
   "license": "MIT",
+  "homepage": "https://github.com/tysoncung/claude-profile-switcher#readme",
+  "bugs": {
+    "url": "https://github.com/tysoncung/claude-profile-switcher/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/tysoncung/claude-profile-switcher.git"
@@ -14,6 +18,14 @@
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "claude",
+    "claude code",
+    "profile",
+    "CLAUDE_CONFIG_DIR",
+    "account switcher",
+    "status bar"
   ],
   "main": "./extension.js",
   "activationEvents": [

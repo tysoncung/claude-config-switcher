@@ -58,3 +58,14 @@ jobs:
           gh release create "$GITHUB_REF_NAME" ./*.vsix \
             --title "$GITHUB_REF_NAME" \
             --generate-notes
+
+      - name: Publish to VS Code Marketplace
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::warning::VSCE_PAT is not set, skipping Marketplace publish"
+            exit 0
+          fi
+          pnpm exec vsce publish --packagePath ./*.vsix

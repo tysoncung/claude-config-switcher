@@ -209,9 +209,11 @@ version tag.
 
 3. The workflow checks that the tag matches `package.json`, packages the
    extension with `pnpm run package`, and creates a release with the `.vsix` attached and
-   auto-generated notes.
+   auto-generated notes. If the `VSCE_PAT` repository secret is set, it also
+   publishes the same `.vsix` to the VS Code Marketplace.
 
-Users then download the `.vsix` from the Releases page and install it:
+Users can install from the Marketplace, or download the `.vsix` from the
+Releases page and install it:
 
 ```bash
 code --install-extension claude-profile-switcher-1.0.0.vsix
