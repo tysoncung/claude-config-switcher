@@ -11,6 +11,8 @@ jump between separate Claude Code config directories / accounts.
 - A command **`Claude Code: Switch Profile`** (also the status bar click) that
   pops a picker of your profiles and, on selection, writes the setting and offers
   to reload the window.
+- Commands **`Claude Code: Create Profile`** and **`Claude Code: Delete Profile`**,
+  also available at the bottom of the switcher picker.
 
 ## Why a separate extension (not a patch)
 
@@ -35,17 +37,34 @@ A profile is just a separate Claude Code config directory. Each directory keeps
 its own login, settings, history, and `CLAUDE.md`, so you can run a personal
 account and a work account side by side.
 
-### 1. Create the config directory
+### From VS Code
 
-Pick a name and create the folder. Use your real home path, since you will need
-the absolute path later.
+Run **`Claude Code: Create Profile`** (or pick **Create new profile...** in the
+switcher) and enter a name such as `work`. The extension:
+
+1. creates `~/.claude-work`,
+2. offers to copy `settings.json`, `CLAUDE.md`, `agents`, `commands` and `skills`
+   from `~/.claude` (login and history are never copied),
+3. offers **Log In**, which opens a terminal running `claude` with
+   `CLAUDE_CONFIG_DIR` set so you can run `/login`, or **Switch Now**.
+
+To remove one, run **`Claude Code: Delete Profile`**. After confirmation the
+folder is moved to the Trash (so it can be recovered), and if it was the active
+profile the switcher goes back to **default**. The default `~/.claude` is never
+offered for deletion.
+
+### By hand
+
+#### 1. Create the config directory
+
+Pick a name and create the folder as `~/.claude-<name>`. The extension finds
+these automatically.
 
 ```bash
 mkdir -p ~/.claude-work
-echo "$HOME/.claude-work"     # copy this absolute path, e.g. /Users/you/.claude-work
 ```
 
-### 2. Log in to that profile
+#### 2. Log in to that profile
 
 Start the Claude Code CLI with `CLAUDE_CONFIG_DIR` pointing at the new folder,
 then sign in with the account you want for this profile.
@@ -66,11 +85,13 @@ cp ~/.claude/settings.json ~/.claude-work/   # global settings
 cp ~/.claude/CLAUDE.md     ~/.claude-work/   # global instructions
 ```
 
-### 3. Add the profile to VS Code
+#### 3. (Optional) Add the profile to VS Code
 
-Open your **User** settings JSON (`Cmd+Shift+P` then
+`~/.claude-work` already appears in the picker as **work**. Only do this step if
+you want a different label or your folder lives somewhere other than
+`~/.claude-<name>`. Open your **User** settings JSON (`Cmd+Shift+P` then
 `Preferences: Open User Settings (JSON)`) and add the profile to
-`claudeProfileSwitcher.profiles`, using the absolute path from step 1:
+`claudeProfileSwitcher.profiles`, using an absolute path:
 
 ```json
 "claudeProfileSwitcher.profiles": [
@@ -81,7 +102,7 @@ Open your **User** settings JSON (`Cmd+Shift+P` then
 
 Do not use `~` here. The Claude Code extension ignores it.
 
-### 4. Switch to it
+#### 4. Switch to it
 
 Click `Claude: ...` in the status bar (or run `Claude Code: Switch Profile`),
 pick **work**, and choose **Reload Window**. Claude Code now runs with the
@@ -98,17 +119,25 @@ alias claude-personal='CLAUDE_CONFIG_DIR="$HOME/.claude-personal" claude'
 
 ## Configure your profiles
 
-Edit `claudeProfileSwitcher.profiles` in settings. Defaults:
+Out of the box the picker shows **default** plus every `~/.claude-<name>`
+directory in your home folder, labelled `<name>`. So `~/.claude-work` shows up
+as **work** with no setup.
+
+To rename a profile or point at a directory somewhere else, list it in
+`claudeProfileSwitcher.profiles`:
 
 ```json
 "claudeProfileSwitcher.profiles": [
   { "label": "default",  "configDir": "" },
   { "label": "personal", "configDir": "/Users/you/.claude-personal" },
-  { "label": "work",     "configDir": "/Users/you/.claude-work" }
+  { "label": "work",     "configDir": "/Volumes/Work/claude-config" }
 ]
 ```
 
-Empty `configDir` means the built-in default (`~/.claude`).
+Empty `configDir` means the built-in default (`~/.claude`). Discovered
+directories already listed here are not shown twice. Set
+`claudeProfileSwitcher.autoDiscover` to `false` to show only the profiles you
+list.
 
 ## Run it (development)
 
@@ -151,7 +180,7 @@ version tag.
 Users then download the `.vsix` from the Releases page and install it:
 
 ```bash
-code --install-extension claude-profile-switcher-0.2.0.vsix
+code --install-extension claude-profile-switcher-0.3.0.vsix
 ```
 
 You can also run the workflow by hand from the **Actions** tab. That builds the
