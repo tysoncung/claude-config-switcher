@@ -43,7 +43,10 @@
         "claudeProfileSwitcher.profiles": {
           "type": "array",
           "default": [
-            { "label": "default", "configDir": "" }
+            {
+              "label": "default",
+              "configDir": ""
+            }
           ],
           "markdownDescription": "Profiles to choose from. `configDir` is the value written to `CLAUDE_CONFIG_DIR` and **must be an absolute path** (the Claude Code extension ignores `~` and relative values). Leave `configDir` empty (`\"\"`) for the built-in default (`~/.claude`).",
           "items": {
@@ -58,7 +61,10 @@
                 "description": "Absolute path for CLAUDE_CONFIG_DIR, or empty for the default."
               }
             },
-            "required": ["label", "configDir"]
+            "required": [
+              "label",
+              "configDir"
+            ]
           }
         },
         "claudeProfileSwitcher.autoDiscover": {
@@ -68,5 +74,20 @@
         }
       }
     }
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "package": "vsce package --no-dependencies"
+  },
+  "packageManager": "pnpm@10.29.3",
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "@vscode/vsce-sign"
+    ]
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.2",
+    "@vscode/vsce": "^4.0.0"
   }
 }

@@ -143,8 +143,21 @@ list.
 
 1. Open this folder in VS Code.
 2. Press **F5** → an "Extension Development Host" window launches with the
-   extension loaded. No `npm install` needed (zero runtime dependencies).
+   extension loaded. The extension has zero runtime dependencies, so this works
+   without installing anything.
 3. Look for `Claude: …` in the status bar; click it to switch.
+
+Tooling uses [pnpm](https://pnpm.io). Run `pnpm install` once, then:
+
+```bash
+pnpm lint        # Biome lint + format check
+pnpm format      # apply Biome fixes
+pnpm run package # build the .vsix
+```
+
+CI runs Biome and packaging on every push and pull request, and audits the
+GitHub workflows with [zizmor](https://docs.zizmor.sh). Dependency and action
+updates come from [Renovate](https://docs.renovatebot.com) (`renovate.json`).
 
 ## Install it permanently
 
@@ -152,8 +165,9 @@ Package to a `.vsix` and install:
 
 ```bash
 cd ~/codes/claude-profile-switcher
-npx @vscode/vsce package          # produces claude-profile-switcher-0.1.0.vsix
-code --install-extension claude-profile-switcher-0.1.0.vsix
+pnpm install
+pnpm run package                  # produces claude-profile-switcher-<version>.vsix
+code --install-extension claude-profile-switcher-<version>.vsix
 ```
 
 Then reload VS Code. (`vsce` may ask you to set a real `publisher`; any string
@@ -174,7 +188,7 @@ version tag.
    ```
 
 3. The workflow checks that the tag matches `package.json`, packages the
-   extension with `vsce`, and creates a release with the `.vsix` attached and
+   extension with `pnpm run package`, and creates a release with the `.vsix` attached and
    auto-generated notes.
 
 Users then download the `.vsix` from the Releases page and install it:

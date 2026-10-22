@@ -1,7 +1,7 @@
 const vscode = require("vscode");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
 // The official Claude Code extension's setting we drive.
 // NOTE: it is "scope": "machine" => can only live in USER settings, never workspace.
@@ -43,8 +43,7 @@ function getProfiles() {
 
 /** The CLAUDE_CONFIG_DIR currently set in the user settings (or "" if none). */
 function readConfigDir() {
-  const arr =
-    vscode.workspace.getConfiguration().inspect(CC_SETTING)?.globalValue || [];
+  const arr = vscode.workspace.getConfiguration().inspect(CC_SETTING)?.globalValue || [];
   const entry = arr.find((e) => e && e.name === KEY);
   return entry ? entry.value : "";
 }
@@ -121,7 +120,10 @@ async function createProfile() {
   const available = SHAREABLE.filter((f) => fs.existsSync(path.join(source, f)));
   if (available.length) {
     const picks = await vscode.window.showQuickPick(
-      available.map((f) => ({ label: f, picked: f === "settings.json" || f === "CLAUDE.md" })),
+      available.map((f) => ({
+        label: f,
+        picked: f === "settings.json" || f === "CLAUDE.md",
+      })),
       {
         title: `Copy from ~/.claude into ~/.claude-${label}?`,
         placeHolder: "Pick what to share with the new profile (Esc to copy nothing)",
@@ -138,7 +140,8 @@ async function createProfile() {
   // Without auto-discovery the new folder would be invisible, so list it explicitly.
   const config = vscode.workspace.getConfiguration("claudeProfileSwitcher");
   if (!config.get("autoDiscover", true)) {
-    const profiles = config.inspect("profiles")?.globalValue || config.get("profiles", []);
+    const profiles =
+      config.inspect("profiles")?.globalValue || config.get("profiles", []);
     await config.update(
       "profiles",
       [...profiles, { label, configDir }],
@@ -253,10 +256,7 @@ async function applyProfile(profile) {
 }
 
 function activate(context) {
-  statusBar = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    100
-  );
+  statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBar.command = "claudeProfileSwitcher.switch";
   context.subscriptions.push(statusBar);
 
