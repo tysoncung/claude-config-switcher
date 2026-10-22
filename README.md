@@ -11,8 +11,11 @@ jump between separate Claude Code config directories / accounts.
 - A command **`Claude Code: Switch Profile`** (also the status bar click) that
   pops a picker of your profiles and, on selection, writes the setting and offers
   to reload the window.
-- Commands **`Claude Code: Create Profile`** and **`Claude Code: Delete Profile`**,
-  also available at the bottom of the switcher picker.
+- Commands **`Claude Code: Create Profile`**, **`Claude Code: Set Profile Color`**
+  and **`Claude Code: Delete Profile`**, also available at the bottom of the
+  switcher picker.
+- An optional **color per profile**: while that profile is active the whole status
+  bar is tinted, so you always know which account you are on.
 
 ## Why a separate extension (not a patch)
 
@@ -138,6 +141,23 @@ Empty `configDir` means the built-in default (`~/.claude`). Discovered
 directories already listed here are not shown twice. Set
 `claudeProfileSwitcher.autoDiscover` to `false` to show only the profiles you
 list.
+
+## Profile colors
+
+Run **`Claude Code: Set Profile Color`** (or **Set profile color...** in the
+switcher), pick a profile, then a preset, a custom hex value, or **No color**.
+New profiles are also asked for a color when created. Colors are stored in
+`claudeProfileSwitcher.colors`, keyed by profile label:
+
+```json
+"claudeProfileSwitcher.colors": { "work": "#c62828", "personal": "#2e7d32" }
+```
+
+The extension writes `statusBar.background` and a readable text color into
+your User `workbench.colorCustomizations`. It only ever removes values it wrote
+itself, so your own color customizations are left alone. A theme-specific
+block such as `"[Default Dark Modern]": { ... }` in that setting takes priority
+over the tint.
 
 ## Run it (development)
 

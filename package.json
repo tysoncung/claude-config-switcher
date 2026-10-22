@@ -32,6 +32,11 @@
         "category": "Claude Code"
       },
       {
+        "command": "claudeProfileSwitcher.setColor",
+        "title": "Set Profile Color",
+        "category": "Claude Code"
+      },
+      {
         "command": "claudeProfileSwitcher.delete",
         "title": "Delete Profile",
         "category": "Claude Code"
@@ -71,6 +76,15 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Also list every `~/.claude-<name>` directory as a profile named `<name>`, in addition to `#claudeProfileSwitcher.profiles#`."
+        },
+        "claudeProfileSwitcher.colors": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+          },
+          "markdownDescription": "Status bar color per profile label, e.g. `{ \"work\": \"#c62828\" }`. While that profile is active the whole status bar is tinted via `#workbench.colorCustomizations#`. Use **Claude Code: Set Profile Color** to pick one."
         }
       }
     }

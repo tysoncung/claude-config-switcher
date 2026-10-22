@@ -8,7 +8,22 @@ const path = require("node:path");
 const CC_SETTING = "claudeCode.environmentVariables";
 const KEY = "CLAUDE_CONFIG_DIR";
 
+const PRESET_COLORS = [
+  ["Red", "#c62828"],
+  ["Orange", "#ef6c00"],
+  ["Amber", "#f9a825"],
+  ["Green", "#2e7d32"],
+  ["Teal", "#00897b"],
+  ["Blue", "#1565c0"],
+  ["Purple", "#6a1b9a"],
+  ["Pink", "#ad1457"],
+  ["Slate", "#546e7a"],
+];
+
+const HEX_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
 let statusBar;
+let state;
 
 /** Every ~/.claude-<name> directory, as a profile labelled <name>. */
 function discoverProfiles() {
@@ -63,11 +78,105 @@ function updateStatusBar() {
   statusBar.show();
 }
 
+function getColor(label) {
+  return vscode.workspace.getConfiguration("claudeProfileSwitcher").get("colors", {})[
+    label
+  ];
+}
+
+/** Black or white, whichever reads better on the given background. */
+function contrastText(hex) {
+  let h = hex.slice(1);
+  if (h.length === 3) h = [...h].map((c) => c + c).join("");
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  return 0.299 * r + 0.587 * g + 0.114 * b > 0.6 ? "#000000" : "#ffffff";
+}
+
+/**
+ * Tint the status bar with the active profile's color. Only removes values this
+ * extension wrote itself, so the user's own colorCustomizations survive.
+ */
+async function syncColor() {
+  const color = getColor(labelForValue(readConfigDir()));
+  const config = vscode.workspace.getConfiguration();
+  const current = config.inspect("workbench.colorCustomizations")?.globalValue || {};
+  const owned = state.get("ownedColors", {});
+
+  const next = { ...current };
+  for (const [k, v] of Object.entries(owned)) {
+    if (next[k] === v) delete next[k];
+  }
+  const wrote = {};
+  if (color && HEX_COLOR.test(color)) {
+    const fg = contrastText(color);
+    wrote["statusBar.background"] = color;
+    wrote["statusBar.noFolderBackground"] = color;
+    wrote["statusBar.foreground"] = fg;
+    wrote["statusBar.noFolderForeground"] = fg;
+    Object.assign(next, wrote);
+  }
+
+  if (JSON.stringify(next) !== JSON.stringify(current)) {
+    await config.update(
+      "workbench.colorCustomizations",
+      Object.keys(next).length ? next : undefined,
+      vscode.ConfigurationTarget.Global
+    );
+  }
+  await state.update("ownedColors", wrote);
+}
+
+/** @returns hex color, "" for no color, or undefined if cancelled. */
+async function pickColor(label) {
+  const items = [
+    ...PRESET_COLORS.map(([name, hex]) => ({ label: name, description: hex, hex })),
+    { label: "$(edit) Custom hex...", custom: true },
+    { label: "$(close) No color", hex: "" },
+  ];
+  const pick = await vscode.window.showQuickPick(items, {
+    title: `Status bar color for "${label}"`,
+    placeHolder: "The whole status bar is tinted while this profile is active",
+  });
+  if (!pick) return undefined;
+  if (!pick.custom) return pick.hex;
+
+  const hex = await vscode.window.showInputBox({
+    title: `Status bar color for "${label}"`,
+    prompt: "Hex color, e.g. #8b2fc9",
+    value: getColor(label) || "#",
+    validateInput: (v) => (HEX_COLOR.test(v.trim()) ? undefined : "Use #rgb or #rrggbb."),
+  });
+  return hex === undefined ? undefined : hex.trim();
+}
+
+async function saveColor(label, color) {
+  const config = vscode.workspace.getConfiguration("claudeProfileSwitcher");
+  const colors = { ...(config.inspect("colors")?.globalValue || {}) };
+  if (color) colors[label] = color;
+  else delete colors[label];
+  await config.update(
+    "colors",
+    Object.keys(colors).length ? colors : undefined,
+    vscode.ConfigurationTarget.Global
+  );
+}
+
+async function setProfileColor() {
+  const pick = await vscode.window.showQuickPick(profileItems(getProfiles()), {
+    title: "Set Claude Code Profile Color",
+    placeHolder: "Select the profile to color",
+  });
+  if (!pick) return;
+  const color = await pickColor(pick.profile.label);
+  if (color !== undefined) await saveColor(pick.profile.label, color);
+}
+
 async function switchProfile() {
   const items = [
     ...profileItems(getProfiles()),
     { label: "", kind: vscode.QuickPickItemKind.Separator },
     { label: "$(add) Create new profile...", action: createProfile },
+    { label: "$(symbol-color) Set profile color...", action: setProfileColor },
     { label: "$(trash) Delete a profile...", action: deleteProfile },
   ];
 
@@ -85,7 +194,9 @@ function profileItems(profiles) {
   const current = readConfigDir();
   return profiles.map((p) => ({
     label: p.label,
-    description: p.configDir || "default (~/.claude)",
+    description: [p.configDir || "default (~/.claude)", getColor(p.label)]
+      .filter(Boolean)
+      .join("  ·  "),
     detail: (p.configDir || "") === (current || "") ? "$(check) current" : undefined,
     profile: p,
   }));
@@ -136,6 +247,9 @@ async function createProfile() {
       });
     }
   }
+
+  const color = await pickColor(label);
+  if (color) await saveColor(label, color);
 
   // Without auto-discovery the new folder would be invisible, so list it explicitly.
   const config = vscode.workspace.getConfiguration("claudeProfileSwitcher");
@@ -215,6 +329,7 @@ async function deleteProfile() {
       vscode.ConfigurationTarget.Global
     );
   }
+  if (getColor(label)) await saveColor(label, "");
 
   if (readConfigDir() === configDir) {
     await applyProfile({ label: "default", configDir: "" });
@@ -256,6 +371,7 @@ async function applyProfile(profile) {
 }
 
 function activate(context) {
+  state = context.globalState;
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBar.command = "claudeProfileSwitcher.switch";
   context.subscriptions.push(statusBar);
@@ -263,7 +379,8 @@ function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand("claudeProfileSwitcher.switch", switchProfile),
     vscode.commands.registerCommand("claudeProfileSwitcher.create", createProfile),
-    vscode.commands.registerCommand("claudeProfileSwitcher.delete", deleteProfile)
+    vscode.commands.registerCommand("claudeProfileSwitcher.delete", deleteProfile),
+    vscode.commands.registerCommand("claudeProfileSwitcher.setColor", setProfileColor)
   );
 
   // Keep the status bar in sync if settings change by other means.
@@ -274,11 +391,13 @@ function activate(context) {
         e.affectsConfiguration("claudeProfileSwitcher")
       ) {
         updateStatusBar();
+        syncColor();
       }
     })
   );
 
   updateStatusBar();
+  syncColor();
 }
 
 function deactivate() {}
