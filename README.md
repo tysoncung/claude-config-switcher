@@ -214,7 +214,7 @@ version tag.
 Users then download the `.vsix` from the Releases page and install it:
 
 ```bash
-code --install-extension claude-profile-switcher-0.3.0.vsix
+code --install-extension claude-profile-switcher-1.0.0.vsix
 ```
 
 You can also run the workflow by hand from the **Actions** tab. That builds the
