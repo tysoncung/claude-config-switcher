@@ -2,7 +2,7 @@
   "name": "claude-profile-switcher",
   "displayName": "Claude Code Profile Switcher",
   "description": "Switch between Claude Code config directories (CLAUDE_CONFIG_DIR) from a status bar item.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "wennalee",
   "license": "MIT",
   "repository": {
