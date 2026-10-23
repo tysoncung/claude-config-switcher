@@ -1,23 +1,64 @@
 # Claude Config Switcher
 
 A tiny companion VS Code extension that adds the profile-switching feature the
-official Claude Code extension doesn't have. It flips `CLAUDE_CONFIG_DIR` (via
-the official extension's `claudeCode.environmentVariables` setting) so you can
-jump between separate Claude Code config directories / accounts.
+official Claude Code extension doesn't have. It picks which `CLAUDE_CONFIG_DIR`
+Claude Code uses, so you can keep separate config directories / accounts and
+use a different one in each window or project.
 
 ## What it adds
 
-- A **status bar item** (bottom-right) showing the active profile, e.g. `Claude: work`.
-- A command **`Claude Code: Switch Profile`** (also the status bar click) that
-  pops a picker of your profiles and, on selection, writes the setting and offers
-  to reload the window.
-- Commands **`Claude Code: Create Profile`**, **`Claude Code: Set Profile Color`**
-  and **`Claude Code: Delete Profile`**, also available at the bottom of the
-  switcher picker.
-- An optional **color per profile**: while that profile is active the whole status
-  bar is tinted, so you always know which account you are on.
-- The **integrated terminal follows along**: `claude` run in a new VS Code
-  terminal uses the same profile as the Claude Code panel.
+- A **status bar item** (bottom-right) showing this window's profile and why:
+  `$(account)` global default, `$(pinned)` pinned to the project, `$(window)`
+  this window only. `$(sync)` means a change is waiting for a reload.
+- **`Claude Code: Switch Profile`** (also the status bar click). Clicking a
+  profile changes whichever setting decides this window. The buttons on each
+  row choose instead: **pin to this project**, **use in this window only**, or
+  **make the global default**.
+- **`Claude Code: Pin Profile to This Project`**, **`Use Profile in This Window
+  Only`** and **`Set Global Default Profile`** for the same thing from the
+  Command Palette.
+- **`Claude Code: Create Profile`**, **`Set Profile Color`** and **`Delete
+  Profile`**, also at the bottom of the switcher picker.
+- An optional **color per profile**: while that profile is active the whole
+  status bar is tinted, so you always know which account you are on.
+- The **integrated terminal follows along**: `claude` run in a new terminal uses
+  the same profile as the Claude Code panel in that window.
+
+## Which profile a window uses
+
+The first of these that is set wins:
+
+1. **This window only.** Remembered for this workspace on this machine, not
+   written to the project.
+2. **Pinned to this project.** Saved as `claudeConfigSwitcher.profile` in the
+   project's `.vscode/settings.json`, so it can be committed. It is the profile
+   *label*, so teammates need a profile with the same name. Ignored until the
+   folder is trusted.
+3. **Global default.** `claudeConfigSwitcher.defaultProfile` in your User
+   settings.
+
+If none is set, Claude Code keeps whatever `CLAUDE_CONFIG_DIR` VS Code was
+started with (normally none, which means `~/.claude`).
+
+## How it works
+
+The Claude Code extension starts `claude` with this window's environment plus
+its `claudeCode.environmentVariables` setting. Every window has its own
+extension host, so this extension sets `CLAUDE_CONFIG_DIR` in that environment
+for its own window, and in the environment for new integrated terminals. It
+starts early (activation event `*`) so the value is in place before Claude Code
+reads it.
+
+- **Reload after switching.** Claude Code reads some of its config location when
+  it starts, so the picker offers to reload the window.
+- **Keep `CLAUDE_CONFIG_DIR` out of `claudeCode.environmentVariables`.** That
+  setting applies to every window and overrides this extension. Versions before
+  1.2 stored the profile there; it is moved into the global default
+  automatically. The status bar warns if it shows up again.
+- **The default profile leaves the variable unset** rather than pointing it at
+  `~/.claude`, because Claude Code stores the login under a different name
+  whenever the variable is set.
+- **Paths.** A leading `~` is expanded for you. Relative paths are refused.
 
 ## How it differs from symlink-based switchers
 
@@ -25,9 +66,7 @@ Some switchers repoint `~/.claude` as a symlink. That changes the config for
 every terminal and every Claude session on the machine, and does not work on
 Windows. This extension never touches `~/.claude` or your shell files:
 
-- it switches only through the official extension's
-  `claudeCode.environmentVariables` setting and VS Code's terminal env setting,
-  keeping any other variables you have there;
+- each window can use a different account at the same time;
 - it works on macOS, Linux and Windows;
 - it asks before reloading the window, and only removes status bar colors it
   wrote itself.
@@ -36,19 +75,7 @@ Windows. This extension never touches `~/.claude` or your shell files:
 
 The official `anthropic.claude-code` extension is a closed-source, minified
 bundle that VS Code replaces on every update. Any hand-edit would be lost. This
-extension sits beside it and drives it only through the supported
-`claudeCode.environmentVariables` setting.
-
-## Important constraints (learned from the official extension's manifest)
-
-- `claudeCode.environmentVariables` is **`scope: machine`** → it can only live in
-  **User settings**, never workspace `.vscode/settings.json`. This extension
-  therefore always writes to User settings.
-- `CLAUDE_CONFIG_DIR` **must be an absolute path**. The official extension ignores
-  `~` and relative values, so the switcher expands a leading `~` for you and
-  refuses relative `configDir`s.
-- Switching takes effect after a **window reload** (the extension reads env vars
-  when it launches Claude). The picker offers to reload for you.
+extension sits beside it and only sets environment variables it already reads.
 
 ## Create a new profile
 
@@ -119,13 +146,16 @@ you want a different label or your folder lives somewhere other than
 ]
 ```
 
-A leading `~` is expanded to your home folder before it is written.
+A leading `~` is expanded to your home folder.
 
 #### 4. Switch to it
 
 Click `Claude: ...` in the status bar (or run `Claude Code: Switch Profile`),
 pick **work**, and choose **Reload Window**. Claude Code now runs with the
 `work` login and settings. Switch back to **default** the same way.
+
+To use **work** only in one project, click the pin button on its row instead.
+Other windows keep their own profile.
 
 ### Tip: matching terminal aliases
 
@@ -158,9 +188,14 @@ directories already listed here are not shown twice. Set
 `claudeConfigSwitcher.autoDiscover` to `false` to show only the profiles you
 list.
 
-Switching also sets `CLAUDE_CONFIG_DIR` in `terminal.integrated.env.<os>`, so
-new integrated terminals match the panel. Set `claudeConfigSwitcher.syncTerminal`
-to `false` if you manage that variable yourself.
+New integrated terminals get the window's `CLAUDE_CONFIG_DIR` too, and VS Code
+offers to relaunch terminals that are already open. Set
+`claudeConfigSwitcher.syncTerminal` to `false` if you manage that variable
+yourself.
+
+Profiles, colors and the global default are User-level settings only, so a
+project's `.vscode/settings.json` cannot add a profile or point one at another
+directory. It can only pin one of your existing profiles by label.
 
 Settings were named `claudeProfileSwitcher.*` before 1.1.0. They are copied to
 `claudeConfigSwitcher.*` automatically on first start.
@@ -177,8 +212,11 @@ New profiles are also asked for a color when created. Colors are stored in
 ```
 
 The extension writes `statusBar.background` and a readable text color into
-your User `workbench.colorCustomizations`. It only ever removes values it wrote
-itself, so your own color customizations are left alone. A theme-specific
+`workbench.colorCustomizations`: the global default's color in your User
+settings, so all windows agree, and a pinned or window-only profile's color in
+the workspace settings. It only ever removes values it wrote itself, so your own
+color customizations are left alone. Give pinned profiles a color of their own:
+a pinned profile with no color shows the global default's tint. A theme-specific
 block such as `"[Default Dark Modern]": { ... }` in that setting takes priority
 over the tint.
 
@@ -239,7 +277,7 @@ Users can install from the Marketplace, or download the `.vsix` from the
 Releases page and install it:
 
 ```bash
-code --install-extension claude-config-switcher-1.1.0.vsix
+code --install-extension claude-config-switcher-1.2.0.vsix
 ```
 
 You can also run the workflow by hand from the **Actions** tab. That builds the

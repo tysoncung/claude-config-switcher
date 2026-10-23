@@ -2,7 +2,7 @@
   "name": "claude-config-switcher",
   "displayName": "Claude Config Switcher",
   "description": "Switch between Claude Code config directories (CLAUDE_CONFIG_DIR) from a status bar item.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "tysoncung",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -20,6 +20,15 @@
   "categories": [
     "Other"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "restrictedConfigurations": [
+        "claudeConfigSwitcher.profile"
+      ],
+      "description": "A profile pinned in an untrusted folder is ignored until you trust it."
+    }
+  },
   "keywords": [
     "claude",
     "claude code",
@@ -30,13 +39,28 @@
   ],
   "main": "./extension.js",
   "activationEvents": [
-    "onStartupFinished"
+    "*"
   ],
   "contributes": {
     "commands": [
       {
         "command": "claudeConfigSwitcher.switch",
         "title": "Switch Profile",
+        "category": "Claude Code"
+      },
+      {
+        "command": "claudeConfigSwitcher.pinToProject",
+        "title": "Pin Profile to This Project",
+        "category": "Claude Code"
+      },
+      {
+        "command": "claudeConfigSwitcher.useForWindow",
+        "title": "Use Profile in This Window Only",
+        "category": "Claude Code"
+      },
+      {
+        "command": "claudeConfigSwitcher.setDefault",
+        "title": "Set Global Default Profile",
         "category": "Claude Code"
       },
       {
@@ -58,6 +82,18 @@
     "configuration": {
       "title": "Claude Config Switcher",
       "properties": {
+        "claudeConfigSwitcher.defaultProfile": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "markdownDescription": "Label of the profile every window uses unless a project pin or window-only choice says otherwise. Empty keeps whatever `CLAUDE_CONFIG_DIR` VS Code was started with."
+        },
+        "claudeConfigSwitcher.profile": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "markdownDescription": "Profile label pinned to this project. Set it in **Workspace** settings, or run **Claude Code: Pin Profile to This Project**. Ignored until the folder is trusted."
+        },
         "claudeConfigSwitcher.profiles": {
           "type": "array",
           "default": [
@@ -83,12 +119,14 @@
               "label",
               "configDir"
             ]
-          }
+          },
+          "scope": "application"
         },
         "claudeConfigSwitcher.autoDiscover": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Also list every `~/.claude-<name>` directory as a profile named `<name>`, in addition to `#claudeConfigSwitcher.profiles#`."
+          "markdownDescription": "Also list every `~/.claude-<name>` directory as a profile named `<name>`, in addition to `#claudeConfigSwitcher.profiles#`.",
+          "scope": "application"
         },
         "claudeConfigSwitcher.colors": {
           "type": "object",
@@ -97,12 +135,14 @@
             "type": "string",
             "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
           },
-          "markdownDescription": "Status bar color per profile label, e.g. `{ \"work\": \"#c62828\" }`. While that profile is active the whole status bar is tinted via `#workbench.colorCustomizations#`. Use **Claude Code: Set Profile Color** to pick one."
+          "markdownDescription": "Status bar color per profile label, e.g. `{ \"work\": \"#c62828\" }`. While that profile is active the whole status bar is tinted via `#workbench.colorCustomizations#`. Use **Claude Code: Set Profile Color** to pick one.",
+          "scope": "application"
         },
         "claudeConfigSwitcher.syncTerminal": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Also set `CLAUDE_CONFIG_DIR` in `#terminal.integrated.env.*#` for this OS, so running `claude` in the integrated terminal uses the same profile as the Claude Code panel."
+          "markdownDescription": "Also give new integrated terminals in each window that window's `CLAUDE_CONFIG_DIR`, so running `claude` there uses the same profile as the Claude Code panel.",
+          "scope": "application"
         }
       }
     }

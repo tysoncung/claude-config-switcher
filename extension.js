@@ -3,12 +3,18 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-// The official Claude Code extension's setting we drive.
-// NOTE: it is "scope": "machine" => can only live in USER settings, never workspace.
+// The official Claude Code extension builds the env for every `claude` it spawns
+// as { ...process.env, ...claudeCode.environmentVariables }. Both extensions share
+// this window's extension host, so setting process.env here picks the profile for
+// this window only, as long as the (machine-wide) setting doesn't override it.
 const CC_SETTING = "claudeCode.environmentVariables";
 const KEY = "CLAUDE_CONFIG_DIR";
+const NS = "claudeConfigSwitcher";
 
-// Integrated terminal env for this OS, so `claude` in a terminal matches the panel.
+// Whatever VS Code was launched with, restored when no profile is chosen.
+const AMBIENT = process.env[KEY];
+
+// 1.1.0 mirrored the profile into the terminal env setting for this OS.
 const TERMINAL_ENV = `terminal.integrated.env.${
   { darwin: "osx", win32: "windows" }[process.platform] || "linux"
 }`;
@@ -27,8 +33,45 @@ const PRESET_COLORS = [
 
 const HEX_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
+// Where a window's profile comes from, highest priority first.
+const LEVELS = ["window", "project", "global"];
+const LEVEL_NAME = {
+  window: "this window only",
+  project: "pinned to this project",
+  global: "global default",
+  none: "not set",
+};
+const LEVEL_ICON = { window: "$(window)", project: "$(pinned)", global: "$(account)" };
+
+const BUTTONS = {
+  project: { iconPath: new vscode.ThemeIcon("pinned"), tooltip: "Pin to this project" },
+  window: {
+    iconPath: new vscode.ThemeIcon("window"),
+    tooltip: "Use in this window only",
+  },
+  global: { iconPath: new vscode.ThemeIcon("globe"), tooltip: "Make the global default" },
+};
+
 let statusBar;
-let state;
+let ctx;
+let applied; // the resolution currently in process.env
+
+function cfg() {
+  return vscode.workspace.getConfiguration(NS);
+}
+
+function hasFolder() {
+  return Boolean(vscode.workspace.workspaceFolders?.length);
+}
+
+/** Expands a leading "~", which the official extension would otherwise ignore. */
+function expandHome(p) {
+  p = (p || "").trim();
+  if (p === "~") return os.homedir();
+  if (p.startsWith("~/") || p.startsWith("~\\"))
+    return path.join(os.homedir(), p.slice(2));
+  return p;
+}
 
 /** Every ~/.claude-<name> directory, as a profile labelled <name>. */
 function discoverProfiles() {
@@ -48,56 +91,117 @@ function discoverProfiles() {
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-/** Expands a leading "~", which the official extension would otherwise ignore. */
-function expandHome(p) {
-  p = (p || "").trim();
-  if (p === "~") return os.homedir();
-  if (p.startsWith("~/") || p.startsWith("~\\"))
-    return path.join(os.homedir(), p.slice(2));
-  return p;
-}
-
-/** Configured profiles, plus discovered ones whose path isn't already listed. */
+/** Configured profiles, plus discovered ones, always including "default" (~/.claude). */
 function getProfiles() {
-  const config = vscode.workspace.getConfiguration("claudeConfigSwitcher");
-  const profiles = config
+  const profiles = cfg()
     .get("profiles", [])
     .map((p) => ({ label: p.label, configDir: expandHome(p.configDir) }));
-  if (!config.get("autoDiscover", true)) return profiles;
+  if (!profiles.some((p) => !p.configDir))
+    profiles.unshift({ label: "default", configDir: "" });
+  if (!cfg().get("autoDiscover", true)) return profiles;
 
-  const known = new Set(profiles.map((p) => p.configDir || ""));
+  const known = new Set(profiles.map((p) => p.configDir));
   for (const p of discoverProfiles()) {
     if (!known.has(p.configDir)) profiles.push(p);
   }
   return profiles;
 }
 
-/** The CLAUDE_CONFIG_DIR currently set in the user settings (or "" if none). */
-function readConfigDir() {
+/** The CLAUDE_CONFIG_DIR entry in the official extension's setting, if any. */
+function settingConfigDir() {
   const arr = vscode.workspace.getConfiguration().inspect(CC_SETTING)?.globalValue || [];
-  const entry = arr.find((e) => e && e.name === KEY);
-  return entry ? entry.value : "";
+  return arr.find((e) => e && e.name === KEY)?.value;
 }
 
-function labelForValue(value) {
-  const match = getProfiles().find((p) => (p.configDir || "") === (value || ""));
-  if (match) return match.label;
-  return value ? value : "default";
+/** Label chosen at each level, before checking that the profile exists. */
+function chosenLabels() {
+  const project = cfg().inspect("profile");
+  return {
+    window: ctx.workspaceState.get("profile"),
+    // A cloned repo must not pick a profile until the folder is trusted.
+    project: vscode.workspace.isTrusted
+      ? (project?.workspaceFolderValue ?? project?.workspaceValue)
+      : undefined,
+    global: cfg().get("defaultProfile") || undefined,
+  };
+}
+
+/** Which profile this window should use, and why. */
+function resolve() {
+  const profiles = getProfiles();
+  const chosen = chosenLabels();
+  const problems = [];
+  for (const level of LEVELS) {
+    const label = chosen[level];
+    if (!label) continue;
+    const profile = profiles.find((p) => p.label === label);
+    if (!profile) {
+      problems.push(`No profile named "${label}" (${LEVEL_NAME[level]}).`);
+    } else if (profile.configDir && !path.isAbsolute(profile.configDir)) {
+      problems.push(
+        `Profile "${label}" needs an absolute configDir, got ${profile.configDir}.`
+      );
+    } else {
+      return { profile, level, problems };
+    }
+  }
+  return { profile: undefined, level: "none", problems };
+}
+
+function sameTarget(a, b) {
+  return a.profile?.configDir === b.profile?.configDir;
+}
+
+/** Point this window's extension host and new terminals at the resolved profile. */
+function applyEnv(r) {
+  const dir = r.profile ? r.profile.configDir : AMBIENT;
+  // "default" leaves the variable unset: Claude Code keys its stored login on
+  // whether CLAUDE_CONFIG_DIR is set, even when it points at ~/.claude.
+  if (dir) process.env[KEY] = dir;
+  else delete process.env[KEY];
+
+  const env = ctx.environmentVariableCollection;
+  env.clear();
+  env.description = "Claude Code profile for this window";
+  if (r.profile?.configDir && cfg().get("syncTerminal", true)) {
+    env.replace(KEY, r.profile.configDir);
+  }
+  applied = r;
 }
 
 function updateStatusBar() {
-  const value = readConfigDir();
-  statusBar.text = `$(account) Claude: ${labelForValue(value)}`;
-  statusBar.tooltip = value
-    ? `CLAUDE_CONFIG_DIR = ${value}\nClick to switch Claude Code profile`
-    : `CLAUDE_CONFIG_DIR = (default ~/.claude)\nClick to switch Claude Code profile`;
+  const now = resolve();
+  const label = applied.profile?.label ?? (AMBIENT ? "inherited" : "default");
+  const pending = !sameTarget(now, applied);
+  const problems = [...now.problems];
+  if (settingConfigDir()) {
+    problems.push(
+      `${CC_SETTING} sets ${KEY}, which overrides the profile for every window.`
+    );
+  }
+
+  statusBar.text = `${LEVEL_ICON[applied.level] || "$(account)"} Claude: ${label}${
+    pending ? " $(sync)" : ""
+  }`;
+  statusBar.tooltip = [
+    `Profile: ${label} (${LEVEL_NAME[applied.level]})`,
+    `${KEY} = ${process.env[KEY] || "(default ~/.claude)"}`,
+    pending
+      ? `Reload the window to switch to "${now.profile?.label ?? "inherited"}".`
+      : "",
+    ...problems.map((p) => `⚠ ${p}`),
+    "Click to switch Claude Code profile",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  statusBar.backgroundColor = problems.length
+    ? new vscode.ThemeColor("statusBarItem.warningBackground")
+    : undefined;
   statusBar.show();
 }
 
 function getColor(label) {
-  return vscode.workspace.getConfiguration("claudeConfigSwitcher").get("colors", {})[
-    label
-  ];
+  return cfg().get("colors", {})[label];
 }
 
 /** Black or white, whichever reads better on the given background. */
@@ -109,14 +213,17 @@ function contrastText(hex) {
 }
 
 /**
- * Tint the status bar with the active profile's color. Only removes values this
+ * Write a status bar tint at one settings level. Only removes values this
  * extension wrote itself, so the user's own colorCustomizations survive.
  */
-async function syncColor() {
-  const color = getColor(labelForValue(readConfigDir()));
+async function writeTint(target, memento, color) {
   const config = vscode.workspace.getConfiguration();
-  const current = config.inspect("workbench.colorCustomizations")?.globalValue || {};
-  const owned = state.get("ownedColors", {});
+  const info = config.inspect("workbench.colorCustomizations");
+  const current =
+    (target === vscode.ConfigurationTarget.Global
+      ? info?.globalValue
+      : info?.workspaceValue) || {};
+  const owned = memento.get("ownedColors", {});
 
   const next = { ...current };
   for (const [k, v] of Object.entries(owned)) {
@@ -136,10 +243,27 @@ async function syncColor() {
     await config.update(
       "workbench.colorCustomizations",
       Object.keys(next).length ? next : undefined,
-      vscode.ConfigurationTarget.Global
+      target
     );
   }
-  await state.update("ownedColors", wrote);
+  await memento.update("ownedColors", wrote);
+}
+
+/**
+ * User settings carry the global default's tint, so every window agrees on it.
+ * A window on a project pin or window-only profile adds its own in workspace settings.
+ */
+async function syncColor() {
+  const global = cfg().get("defaultProfile") || (AMBIENT ? undefined : "default");
+  await writeTint(vscode.ConfigurationTarget.Global, ctx.globalState, getColor(global));
+  if (hasFolder()) {
+    const own = applied.level === "project" || applied.level === "window";
+    await writeTint(
+      vscode.ConfigurationTarget.Workspace,
+      ctx.workspaceState,
+      own ? getColor(applied.profile.label) : undefined
+    );
+  }
 }
 
 /** @returns hex color, "" for no color, or undefined if cancelled. */
@@ -166,56 +290,162 @@ async function pickColor(label) {
 }
 
 async function saveColor(label, color) {
-  const config = vscode.workspace.getConfiguration("claudeConfigSwitcher");
-  const colors = { ...(config.inspect("colors")?.globalValue || {}) };
+  const colors = { ...(cfg().inspect("colors")?.globalValue || {}) };
   if (color) colors[label] = color;
   else delete colors[label];
-  await config.update(
+  await cfg().update(
     "colors",
     Object.keys(colors).length ? colors : undefined,
     vscode.ConfigurationTarget.Global
   );
 }
 
-async function setProfileColor() {
+async function pickProfile(title, placeHolder) {
   const pick = await vscode.window.showQuickPick(profileItems(getProfiles()), {
-    title: "Set Claude Code Profile Color",
-    placeHolder: "Select the profile to color",
+    title,
+    placeHolder,
   });
-  if (!pick) return;
-  const color = await pickColor(pick.profile.label);
-  if (color !== undefined) await saveColor(pick.profile.label, color);
+  return pick?.profile;
+}
+
+async function setProfileColor() {
+  const profile = await pickProfile(
+    "Set Claude Code Profile Color",
+    "Select the profile to color"
+  );
+  if (!profile) return;
+  const color = await pickColor(profile.label);
+  if (color !== undefined) await saveColor(profile.label, color);
+}
+
+function profileItems(profiles, buttons = []) {
+  const chosen = chosenLabels();
+  return profiles.map((p) => ({
+    label: p.label,
+    description: [p.configDir || "~/.claude", getColor(p.label)]
+      .filter(Boolean)
+      .join("  ·  "),
+    detail: [
+      applied.profile?.label === p.label ? "$(check) this window" : "",
+      ...LEVELS.filter((l) => chosen[l] === p.label).map((l) => LEVEL_NAME[l]),
+    ]
+      .filter(Boolean)
+      .join("  ·  "),
+    buttons,
+    profile: p,
+  }));
+}
+
+/** Store a profile label at one level; undefined clears that level. */
+async function setLevel(level, label) {
+  if (level === "window") {
+    await ctx.workspaceState.update("profile", label);
+  } else if (level === "project") {
+    await cfg().update("profile", label, vscode.ConfigurationTarget.Workspace);
+  } else {
+    await cfg().update("defaultProfile", label, vscode.ConfigurationTarget.Global);
+  }
+}
+
+/** Apply a change made in this window and offer the reload Claude Code needs. */
+async function afterChange(message) {
+  const now = resolve();
+  if (sameTarget(now, applied)) {
+    applied = now;
+    updateStatusBar();
+    await syncColor();
+    vscode.window.showInformationMessage(message);
+    return;
+  }
+  applyEnv(now);
+  updateStatusBar();
+  await syncColor();
+  const choice = await vscode.window.showInformationMessage(
+    `${message} Reload the window for Claude Code to use "${now.profile?.label ?? "inherited"}".`,
+    "Reload Window",
+    "Later"
+  );
+  if (choice === "Reload Window") {
+    await vscode.commands.executeCommand("workbench.action.reloadWindow");
+  }
+}
+
+async function useProfile(level, profile) {
+  if (level === "project" && !hasFolder()) {
+    vscode.window.showErrorMessage("Open a folder first to pin a profile to it.");
+    return;
+  }
+  await setLevel(level, profile.label);
+  const outranked = LEVELS.slice(0, LEVELS.indexOf(level)).find((l) => chosenLabels()[l]);
+  const done = {
+    window: "used in this window only",
+    project: "pinned to this project",
+    global: "the global default",
+  }[level];
+  await afterChange(
+    `"${profile.label}" is now ${done}.${
+      outranked ? ` This window still uses its ${LEVEL_NAME[outranked]} profile.` : ""
+    }`
+  );
 }
 
 async function switchProfile() {
-  const items = [
-    ...profileItems(getProfiles()),
-    { label: "", kind: vscode.QuickPickItemKind.Separator },
+  // A plain click changes whichever level decides this window right now.
+  const level = applied.level === "none" ? "global" : applied.level;
+  const chosen = chosenLabels();
+  const buttons = LEVELS.filter((l) => l !== "project" || hasFolder()).map(
+    (l) => BUTTONS[l]
+  );
+  const actions = [
+    chosen.window && {
+      label: "$(close) Stop using a window-only profile",
+      clear: "window",
+    },
+    chosen.project && { label: "$(pinned) Remove this project's pin", clear: "project" },
     { label: "$(add) Create new profile...", action: createProfile },
     { label: "$(symbol-color) Set profile color...", action: setProfileColor },
     { label: "$(trash) Delete a profile...", action: deleteProfile },
+  ].filter(Boolean);
+
+  const qp = vscode.window.createQuickPick();
+  qp.title = "Switch Claude Code Profile";
+  qp.placeholder = `Select a profile (sets the ${LEVEL_NAME[level]}). Buttons choose where else to apply it.`;
+  qp.items = [
+    ...profileItems(getProfiles(), buttons),
+    { label: "", kind: vscode.QuickPickItemKind.Separator },
+    ...actions,
   ];
 
-  const pick = await vscode.window.showQuickPick(items, {
-    title: "Switch Claude Code Profile",
-    placeHolder: "Select which CLAUDE_CONFIG_DIR the Claude Code extension should use",
+  const result = await new Promise((done) => {
+    qp.onDidAccept(() => done({ item: qp.selectedItems[0], level }));
+    qp.onDidTriggerItemButton((e) =>
+      done({
+        item: e.item,
+        level: LEVELS.find((l) => BUTTONS[l] === e.button),
+      })
+    );
+    qp.onDidHide(() => done(undefined));
+    qp.show();
   });
-  if (!pick) return;
-  if (pick.action) return pick.action();
+  qp.dispose();
+  if (!result?.item) return;
 
-  await applyProfile(pick.profile);
+  const { item } = result;
+  if (item.action) return item.action();
+  if (item.clear) {
+    await setLevel(item.clear, undefined);
+    return afterChange(
+      item.clear === "window" ? "Window-only profile cleared." : "Project pin removed."
+    );
+  }
+  await useProfile(result.level, item.profile);
 }
 
-function profileItems(profiles) {
-  const current = readConfigDir();
-  return profiles.map((p) => ({
-    label: p.label,
-    description: [p.configDir || "default (~/.claude)", getColor(p.label)]
-      .filter(Boolean)
-      .join("  ·  "),
-    detail: (p.configDir || "") === (current || "") ? "$(check) current" : undefined,
-    profile: p,
-  }));
+function levelCommand(level, title) {
+  return async () => {
+    const profile = await pickProfile(title, "Select a profile");
+    if (profile) await useProfile(level, profile);
+  };
 }
 
 // Things in ~/.claude worth sharing with a new profile. Login and history are
@@ -268,11 +498,9 @@ async function createProfile() {
   if (color) await saveColor(label, color);
 
   // Without auto-discovery the new folder would be invisible, so list it explicitly.
-  const config = vscode.workspace.getConfiguration("claudeConfigSwitcher");
-  if (!config.get("autoDiscover", true)) {
-    const profiles =
-      config.inspect("profiles")?.globalValue || config.get("profiles", []);
-    await config.update(
+  if (!cfg().get("autoDiscover", true)) {
+    const profiles = cfg().inspect("profiles")?.globalValue || cfg().get("profiles", []);
+    await cfg().update(
       "profiles",
       [...profiles, { label, configDir }],
       vscode.ConfigurationTarget.Global
@@ -295,7 +523,10 @@ async function createProfile() {
       `Run /login inside Claude Code, then switch to "${label}" from the status bar.`
     );
   } else if (choice === "Switch Now") {
-    await applyProfile({ label, configDir });
+    await useProfile(applied.level === "none" ? "global" : applied.level, {
+      label,
+      configDir,
+    });
   }
 }
 
@@ -336,10 +567,9 @@ async function deleteProfile() {
     }
   }
 
-  const config = vscode.workspace.getConfiguration("claudeConfigSwitcher");
-  const listed = config.inspect("profiles")?.globalValue;
+  const listed = cfg().inspect("profiles")?.globalValue;
   if (listed?.some((p) => expandHome(p.configDir) === configDir)) {
-    await config.update(
+    await cfg().update(
       "profiles",
       listed.filter((p) => expandHome(p.configDir) !== configDir),
       vscode.ConfigurationTarget.Global
@@ -347,54 +577,11 @@ async function deleteProfile() {
   }
   if (getColor(label)) await saveColor(label, "");
 
-  if (readConfigDir() === configDir) {
-    await applyProfile({ label: "default", configDir: "" });
-  } else {
-    vscode.window.showInformationMessage(`Deleted profile "${label}".`);
+  const chosen = chosenLabels();
+  for (const level of LEVELS) {
+    if (chosen[level] === label) await setLevel(level, undefined);
   }
-}
-
-async function applyProfile(profile) {
-  const configDir = expandHome(profile.configDir);
-
-  // The official extension ignores relative paths. Fail loudly instead.
-  if (configDir && !path.isAbsolute(configDir)) {
-    vscode.window.showErrorMessage(
-      `Profile "${profile.label}": configDir must be an absolute path. Got: ${configDir}`
-    );
-    return;
-  }
-
-  const config = vscode.workspace.getConfiguration();
-  const currentGlobal = config.inspect(CC_SETTING)?.globalValue || [];
-
-  // Preserve any other env vars; replace only our CLAUDE_CONFIG_DIR entry.
-  const next = currentGlobal.filter((e) => !(e && e.name === KEY));
-  if (configDir) next.push({ name: KEY, value: configDir });
-
-  // Machine-scoped setting => must be written to Global (User) settings.
-  await config.update(CC_SETTING, next, vscode.ConfigurationTarget.Global);
-
-  if (config.get("claudeConfigSwitcher.syncTerminal", true)) {
-    const env = { ...(config.inspect(TERMINAL_ENV)?.globalValue || {}) };
-    if (configDir) env[KEY] = configDir;
-    else delete env[KEY];
-    await config.update(
-      TERMINAL_ENV,
-      Object.keys(env).length ? env : undefined,
-      vscode.ConfigurationTarget.Global
-    );
-  }
-  updateStatusBar();
-
-  const choice = await vscode.window.showInformationMessage(
-    `Claude Code profile set to "${profile.label}". Reload the window for it to take effect.`,
-    "Reload Window",
-    "Later"
-  );
-  if (choice === "Reload Window") {
-    await vscode.commands.executeCommand("workbench.action.reloadWindow");
-  }
+  await afterChange(`Deleted profile "${label}".`);
 }
 
 /**
@@ -402,7 +589,7 @@ async function applyProfile(profile) {
  * extension also uses claudeProfileSwitcher.profiles (with "name" instead of
  * "label"), so that key is only taken over when it is in our shape.
  */
-async function migrateSettings() {
+async function migrateNamespace() {
   const config = vscode.workspace.getConfiguration();
   for (const key of ["profiles", "autoDiscover", "colors"]) {
     const oldKey = `claudeProfileSwitcher.${key}`;
@@ -413,7 +600,7 @@ async function migrateSettings() {
       !(Array.isArray(old) && old.every((p) => p && "label" in p))
     )
       continue;
-    const newKey = `claudeConfigSwitcher.${key}`;
+    const newKey = `${NS}.${key}`;
     if (config.inspect(newKey)?.globalValue === undefined) {
       await config.update(newKey, old, vscode.ConfigurationTarget.Global);
     }
@@ -425,36 +612,118 @@ async function migrateSettings() {
   }
 }
 
+/**
+ * Before 1.2 the profile lived in claudeCode.environmentVariables, which applies
+ * to every window and overrides the per-window value. Turn it into the global
+ * default and take it out of that setting.
+ */
+async function migrateGlobalSetting() {
+  const dir = settingConfigDir();
+  if (!dir) return;
+  const config = vscode.workspace.getConfiguration();
+
+  if (cfg().inspect("defaultProfile")?.globalValue === undefined) {
+    let profile = getProfiles().find((p) => p.configDir === expandHome(dir));
+    if (!profile) {
+      profile = {
+        label: path.basename(dir).replace(/^\.claude-/, "") || dir,
+        configDir: dir,
+      };
+      const listed = cfg().inspect("profiles")?.globalValue || cfg().get("profiles", []);
+      await cfg().update(
+        "profiles",
+        [...listed, profile],
+        vscode.ConfigurationTarget.Global
+      );
+    }
+    await cfg().update(
+      "defaultProfile",
+      profile.label,
+      vscode.ConfigurationTarget.Global
+    );
+  }
+
+  const rest = (config.inspect(CC_SETTING)?.globalValue || []).filter(
+    (e) => !(e && e.name === KEY)
+  );
+  await config.update(
+    CC_SETTING,
+    rest.length ? rest : undefined,
+    vscode.ConfigurationTarget.Global
+  );
+
+  const term = config.inspect(TERMINAL_ENV)?.globalValue;
+  if (term?.[KEY] === dir) {
+    const { [KEY]: _, ...others } = term;
+    await config.update(
+      TERMINAL_ENV,
+      Object.keys(others).length ? others : undefined,
+      vscode.ConfigurationTarget.Global
+    );
+  }
+}
+
 function activate(context) {
-  state = context.globalState;
+  ctx = context;
+
+  // Seed the env synchronously, before the Claude Code extension activates and
+  // reads it. A pre-1.2 global setting still counts until it is migrated below.
+  const first = resolve();
+  const legacy = settingConfigDir();
+  if (!first.profile && legacy) {
+    const profile = getProfiles().find((p) => p.configDir === expandHome(legacy)) || {
+      label: path.basename(legacy),
+      configDir: expandHome(legacy),
+    };
+    applyEnv({ profile, level: "global", problems: [] });
+  } else {
+    applyEnv(first);
+  }
+
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  statusBar.command = "claudeConfigSwitcher.switch";
+  statusBar.command = `${NS}.switch`;
   context.subscriptions.push(statusBar);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("claudeConfigSwitcher.switch", switchProfile),
-    vscode.commands.registerCommand("claudeConfigSwitcher.create", createProfile),
-    vscode.commands.registerCommand("claudeConfigSwitcher.delete", deleteProfile),
-    vscode.commands.registerCommand("claudeConfigSwitcher.setColor", setProfileColor)
+    vscode.commands.registerCommand(`${NS}.switch`, switchProfile),
+    vscode.commands.registerCommand(
+      `${NS}.pinToProject`,
+      levelCommand("project", "Pin Claude Code Profile to This Project")
+    ),
+    vscode.commands.registerCommand(
+      `${NS}.useForWindow`,
+      levelCommand("window", "Use Claude Code Profile in This Window Only")
+    ),
+    vscode.commands.registerCommand(
+      `${NS}.setDefault`,
+      levelCommand("global", "Set Global Default Claude Code Profile")
+    ),
+    vscode.commands.registerCommand(`${NS}.create`, createProfile),
+    vscode.commands.registerCommand(`${NS}.delete`, deleteProfile),
+    vscode.commands.registerCommand(`${NS}.setColor`, setProfileColor)
   );
 
-  // Keep the status bar in sync if settings change by other means.
+  // Changes made elsewhere (another window, a settings file) apply on reload;
+  // the status bar shows that one is pending.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (
-        e.affectsConfiguration(CC_SETTING) ||
-        e.affectsConfiguration("claudeConfigSwitcher")
-      ) {
+      if (e.affectsConfiguration(CC_SETTING) || e.affectsConfiguration(NS)) {
         updateStatusBar();
         syncColor();
       }
-    })
+    }),
+    vscode.workspace.onDidGrantWorkspaceTrust(updateStatusBar)
   );
 
-  migrateSettings().finally(() => {
-    updateStatusBar();
-    syncColor();
-  });
+  updateStatusBar();
+  migrateNamespace()
+    .then(migrateGlobalSetting)
+    .finally(() => {
+      // The migration only moved where the choice is stored, not the choice itself.
+      if (sameTarget(resolve(), applied)) applied = resolve();
+      updateStatusBar();
+      syncColor();
+    });
 }
 
 function deactivate() {}
