@@ -1,0 +1,6 @@
+rules:
+  # The VS Code Marketplace and Open VSX have no simple trusted publishing,
+  # so release.yml publishes with tokens kept as repository secrets.
+  use-trusted-publishing:
+    ignore:
+      - release.yml
