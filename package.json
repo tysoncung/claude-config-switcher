@@ -1,8 +1,8 @@
 {
-  "name": "claude-config-switcher",
+  "name": "cc-config-switcher",
   "displayName": "Claude Config Switcher",
   "description": "Switch between Claude Code config directories (CLAUDE_CONFIG_DIR) from a status bar item.",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "publisher": "tysoncung",
   "license": "MIT",
   "icon": "images/icon.png",

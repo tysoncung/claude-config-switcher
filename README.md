@@ -247,8 +247,8 @@ Package to a `.vsix` and install:
 ```bash
 cd ~/codes/claude-profile-switcher
 pnpm install
-pnpm run package                  # produces claude-config-switcher-<version>.vsix
-code --install-extension claude-config-switcher-<version>.vsix
+pnpm run package                  # produces cc-config-switcher-<version>.vsix
+code --install-extension cc-config-switcher-<version>.vsix
 ```
 
 Then reload VS Code. (`vsce` may ask you to set a real `publisher`; any string
@@ -277,7 +277,7 @@ Users can install from the Marketplace, or download the `.vsix` from the
 Releases page and install it:
 
 ```bash
-code --install-extension claude-config-switcher-1.2.0.vsix
+code --install-extension cc-config-switcher-1.2.1.vsix
 ```
 
 You can also run the workflow by hand from the **Actions** tab. That builds the
