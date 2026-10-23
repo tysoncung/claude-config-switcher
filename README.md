@@ -5,6 +5,15 @@ official Claude Code extension doesn't have. It picks which `CLAUDE_CONFIG_DIR`
 Claude Code uses, so you can keep separate config directories / accounts and
 use a different one in each window or project.
 
+## Install
+
+From the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=tysoncung.cc-config-switcher):
+search for **Claude Config Switcher** in the Extensions view, or run
+
+```bash
+code --install-extension tysoncung.cc-config-switcher
+```
+
 ## What it adds
 
 - A **status bar item** (bottom-right) showing this window's profile and why:
