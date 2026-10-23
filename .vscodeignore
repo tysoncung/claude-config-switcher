@@ -8,3 +8,6 @@ renovate.json
 pnpm-lock.yaml
 node_modules/**
 images/icon.svg
+test/**
+scripts/**
+docs/**

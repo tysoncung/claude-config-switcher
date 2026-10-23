@@ -5,6 +5,8 @@ official Claude Code extension doesn't have. It picks which `CLAUDE_CONFIG_DIR`
 Claude Code uses, so you can keep separate config directories / accounts and
 use a different one in each window or project.
 
+![The profile switcher with "work" pinned to the project, and the status bar tinted red for that profile](docs/screenshot.png)
+
 ## Install
 
 From the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=tysoncung.cc-config-switcher):
@@ -254,7 +256,8 @@ updates come from [Renovate](https://docs.renovatebot.com) (`renovate.json`).
 Package to a `.vsix` and install:
 
 ```bash
-cd ~/codes/claude-profile-switcher
+git clone https://github.com/tysoncung/claude-config-switcher.git
+cd claude-config-switcher
 pnpm install
 pnpm run package                  # produces cc-config-switcher-<version>.vsix
 code --install-extension cc-config-switcher-<version>.vsix
@@ -286,7 +289,7 @@ Users can install from the Marketplace, or download the `.vsix` from the
 Releases page and install it:
 
 ```bash
-code --install-extension cc-config-switcher-1.2.1.vsix
+code --install-extension cc-config-switcher-1.2.2.vsix
 ```
 
 You can also run the workflow by hand from the **Actions** tab. That builds the

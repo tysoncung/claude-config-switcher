@@ -1,0 +1,28 @@
+name: Claude Code compatibility
+
+# Per-window profiles rely on how the Claude Code extension builds the env for
+# `claude`. Check the latest release weekly so a breaking change shows up here
+# before users hit it.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - run: node scripts/check-claude-code.mjs

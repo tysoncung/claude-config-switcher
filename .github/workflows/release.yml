@@ -41,6 +41,8 @@ jobs:
 
       - run: pnpm lint
 
+      - run: pnpm test
+
       - name: Package extension
         run: pnpm run package
 
@@ -69,3 +71,16 @@ jobs:
             exit 0
           fi
           pnpm exec vsce publish --packagePath ./*.vsix
+
+      - name: Publish to Open VSX
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::warning::OVSX_PAT is not set, skipping Open VSX publish"
+            exit 0
+          fi
+          # Creating the namespace fails once it exists, which is fine.
+          pnpm exec ovsx create-namespace tysoncung || true
+          pnpm exec ovsx publish ./*.vsix

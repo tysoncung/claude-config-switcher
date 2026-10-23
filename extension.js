@@ -409,7 +409,12 @@ async function switchProfile() {
 
   const qp = vscode.window.createQuickPick();
   qp.title = "Switch Claude Code Profile";
-  qp.placeholder = `Select a profile (sets the ${LEVEL_NAME[level]}). Buttons choose where else to apply it.`;
+  const sets = {
+    window: "this window's profile",
+    project: "this project's pin",
+    global: "the global default",
+  }[level];
+  qp.placeholder = `Pick a profile to change ${sets}, or use a row's buttons`;
   qp.items = [
     ...profileItems(getProfiles(), buttons),
     { label: "", kind: vscode.QuickPickItemKind.Separator },

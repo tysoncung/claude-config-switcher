@@ -2,22 +2,27 @@
   "name": "cc-config-switcher",
   "displayName": "Claude Config Switcher",
   "description": "Switch between Claude Code config directories (CLAUDE_CONFIG_DIR) from a status bar item.",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "publisher": "tysoncung",
   "license": "MIT",
   "icon": "images/icon.png",
-  "homepage": "https://github.com/tysoncung/claude-profile-switcher#readme",
+  "galleryBanner": {
+    "color": "#1a237e",
+    "theme": "dark"
+  },
+  "homepage": "https://github.com/tysoncung/claude-config-switcher#readme",
   "bugs": {
-    "url": "https://github.com/tysoncung/claude-profile-switcher/issues"
+    "url": "https://github.com/tysoncung/claude-config-switcher/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/tysoncung/claude-profile-switcher.git"
+    "url": "https://github.com/tysoncung/claude-config-switcher.git"
   },
   "engines": {
     "vscode": "^1.94.0"
   },
   "categories": [
+    "AI",
     "Other"
   ],
   "capabilities": {
@@ -150,7 +155,8 @@
   "scripts": {
     "lint": "biome check .",
     "format": "biome check --write .",
-    "package": "vsce package --no-dependencies"
+    "package": "vsce package --no-dependencies",
+    "test": "node --test test/*.test.js"
   },
   "packageManager": "pnpm@10.29.3",
   "pnpm": {
@@ -160,6 +166,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.2",
-    "@vscode/vsce": "^4.0.0"
+    "@vscode/vsce": "^4.0.0",
+    "ovsx": "^1.3.0"
   }
 }
