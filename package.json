@@ -2,9 +2,10 @@
   "name": "claude-config-switcher",
   "displayName": "Claude Config Switcher",
   "description": "Switch between Claude Code config directories (CLAUDE_CONFIG_DIR) from a status bar item.",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "publisher": "tysoncung",
   "license": "MIT",
+  "icon": "images/icon.png",
   "homepage": "https://github.com/tysoncung/claude-profile-switcher#readme",
   "bugs": {
     "url": "https://github.com/tysoncung/claude-profile-switcher/issues"
@@ -34,22 +35,22 @@
   "contributes": {
     "commands": [
       {
-        "command": "claudeProfileSwitcher.switch",
+        "command": "claudeConfigSwitcher.switch",
         "title": "Switch Profile",
         "category": "Claude Code"
       },
       {
-        "command": "claudeProfileSwitcher.create",
+        "command": "claudeConfigSwitcher.create",
         "title": "Create Profile",
         "category": "Claude Code"
       },
       {
-        "command": "claudeProfileSwitcher.setColor",
+        "command": "claudeConfigSwitcher.setColor",
         "title": "Set Profile Color",
         "category": "Claude Code"
       },
       {
-        "command": "claudeProfileSwitcher.delete",
+        "command": "claudeConfigSwitcher.delete",
         "title": "Delete Profile",
         "category": "Claude Code"
       }
@@ -57,7 +58,7 @@
     "configuration": {
       "title": "Claude Config Switcher",
       "properties": {
-        "claudeProfileSwitcher.profiles": {
+        "claudeConfigSwitcher.profiles": {
           "type": "array",
           "default": [
             {
@@ -65,7 +66,7 @@
               "configDir": ""
             }
           ],
-          "markdownDescription": "Profiles to choose from. `configDir` is the value written to `CLAUDE_CONFIG_DIR` and **must be an absolute path** (the Claude Code extension ignores `~` and relative values). Leave `configDir` empty (`\"\"`) for the built-in default (`~/.claude`).",
+          "markdownDescription": "Profiles to choose from. `configDir` is the value written to `CLAUDE_CONFIG_DIR`: an absolute path, or one starting with `~` (expanded for you). Leave `configDir` empty (`\"\"`) for the built-in default (`~/.claude`).",
           "items": {
             "type": "object",
             "properties": {
@@ -75,7 +76,7 @@
               },
               "configDir": {
                 "type": "string",
-                "description": "Absolute path for CLAUDE_CONFIG_DIR, or empty for the default."
+                "description": "Absolute or ~ path for CLAUDE_CONFIG_DIR, or empty for the default."
               }
             },
             "required": [
@@ -84,12 +85,12 @@
             ]
           }
         },
-        "claudeProfileSwitcher.autoDiscover": {
+        "claudeConfigSwitcher.autoDiscover": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Also list every `~/.claude-<name>` directory as a profile named `<name>`, in addition to `#claudeProfileSwitcher.profiles#`."
+          "markdownDescription": "Also list every `~/.claude-<name>` directory as a profile named `<name>`, in addition to `#claudeConfigSwitcher.profiles#`."
         },
-        "claudeProfileSwitcher.colors": {
+        "claudeConfigSwitcher.colors": {
           "type": "object",
           "default": {},
           "additionalProperties": {
@@ -97,6 +98,11 @@
             "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
           },
           "markdownDescription": "Status bar color per profile label, e.g. `{ \"work\": \"#c62828\" }`. While that profile is active the whole status bar is tinted via `#workbench.colorCustomizations#`. Use **Claude Code: Set Profile Color** to pick one."
+        },
+        "claudeConfigSwitcher.syncTerminal": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Also set `CLAUDE_CONFIG_DIR` in `#terminal.integrated.env.*#` for this OS, so running `claude` in the integrated terminal uses the same profile as the Claude Code panel."
         }
       }
     }

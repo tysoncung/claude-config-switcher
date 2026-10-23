@@ -8,6 +8,11 @@ const path = require("node:path");
 const CC_SETTING = "claudeCode.environmentVariables";
 const KEY = "CLAUDE_CONFIG_DIR";
 
+// Integrated terminal env for this OS, so `claude` in a terminal matches the panel.
+const TERMINAL_ENV = `terminal.integrated.env.${
+  { darwin: "osx", win32: "windows" }[process.platform] || "linux"
+}`;
+
 const PRESET_COLORS = [
   ["Red", "#c62828"],
   ["Orange", "#ef6c00"],
@@ -43,10 +48,21 @@ function discoverProfiles() {
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
+/** Expands a leading "~", which the official extension would otherwise ignore. */
+function expandHome(p) {
+  p = (p || "").trim();
+  if (p === "~") return os.homedir();
+  if (p.startsWith("~/") || p.startsWith("~\\"))
+    return path.join(os.homedir(), p.slice(2));
+  return p;
+}
+
 /** Configured profiles, plus discovered ones whose path isn't already listed. */
 function getProfiles() {
-  const config = vscode.workspace.getConfiguration("claudeProfileSwitcher");
-  const profiles = [...config.get("profiles", [])];
+  const config = vscode.workspace.getConfiguration("claudeConfigSwitcher");
+  const profiles = config
+    .get("profiles", [])
+    .map((p) => ({ label: p.label, configDir: expandHome(p.configDir) }));
   if (!config.get("autoDiscover", true)) return profiles;
 
   const known = new Set(profiles.map((p) => p.configDir || ""));
@@ -79,7 +95,7 @@ function updateStatusBar() {
 }
 
 function getColor(label) {
-  return vscode.workspace.getConfiguration("claudeProfileSwitcher").get("colors", {})[
+  return vscode.workspace.getConfiguration("claudeConfigSwitcher").get("colors", {})[
     label
   ];
 }
@@ -150,7 +166,7 @@ async function pickColor(label) {
 }
 
 async function saveColor(label, color) {
-  const config = vscode.workspace.getConfiguration("claudeProfileSwitcher");
+  const config = vscode.workspace.getConfiguration("claudeConfigSwitcher");
   const colors = { ...(config.inspect("colors")?.globalValue || {}) };
   if (color) colors[label] = color;
   else delete colors[label];
@@ -252,7 +268,7 @@ async function createProfile() {
   if (color) await saveColor(label, color);
 
   // Without auto-discovery the new folder would be invisible, so list it explicitly.
-  const config = vscode.workspace.getConfiguration("claudeProfileSwitcher");
+  const config = vscode.workspace.getConfiguration("claudeConfigSwitcher");
   if (!config.get("autoDiscover", true)) {
     const profiles =
       config.inspect("profiles")?.globalValue || config.get("profiles", []);
@@ -320,12 +336,12 @@ async function deleteProfile() {
     }
   }
 
-  const config = vscode.workspace.getConfiguration("claudeProfileSwitcher");
+  const config = vscode.workspace.getConfiguration("claudeConfigSwitcher");
   const listed = config.inspect("profiles")?.globalValue;
-  if (listed?.some((p) => p.configDir === configDir)) {
+  if (listed?.some((p) => expandHome(p.configDir) === configDir)) {
     await config.update(
       "profiles",
-      listed.filter((p) => p.configDir !== configDir),
+      listed.filter((p) => expandHome(p.configDir) !== configDir),
       vscode.ConfigurationTarget.Global
     );
   }
@@ -339,12 +355,12 @@ async function deleteProfile() {
 }
 
 async function applyProfile(profile) {
-  const configDir = (profile.configDir || "").trim();
+  const configDir = expandHome(profile.configDir);
 
-  // The official extension ignores "~" and relative paths. Fail loudly instead.
-  if (configDir && !configDir.startsWith("/")) {
+  // The official extension ignores relative paths. Fail loudly instead.
+  if (configDir && !path.isAbsolute(configDir)) {
     vscode.window.showErrorMessage(
-      `Profile "${profile.label}": configDir must be an absolute path (no "~"). Got: ${configDir}`
+      `Profile "${profile.label}": configDir must be an absolute path. Got: ${configDir}`
     );
     return;
   }
@@ -358,6 +374,17 @@ async function applyProfile(profile) {
 
   // Machine-scoped setting => must be written to Global (User) settings.
   await config.update(CC_SETTING, next, vscode.ConfigurationTarget.Global);
+
+  if (config.get("claudeConfigSwitcher.syncTerminal", true)) {
+    const env = { ...(config.inspect(TERMINAL_ENV)?.globalValue || {}) };
+    if (configDir) env[KEY] = configDir;
+    else delete env[KEY];
+    await config.update(
+      TERMINAL_ENV,
+      Object.keys(env).length ? env : undefined,
+      vscode.ConfigurationTarget.Global
+    );
+  }
   updateStatusBar();
 
   const choice = await vscode.window.showInformationMessage(
@@ -370,17 +397,45 @@ async function applyProfile(profile) {
   }
 }
 
+/**
+ * Copy settings from the pre-1.1 "claudeProfileSwitcher" namespace. Another
+ * extension also uses claudeProfileSwitcher.profiles (with "name" instead of
+ * "label"), so that key is only taken over when it is in our shape.
+ */
+async function migrateSettings() {
+  const config = vscode.workspace.getConfiguration();
+  for (const key of ["profiles", "autoDiscover", "colors"]) {
+    const oldKey = `claudeProfileSwitcher.${key}`;
+    const old = config.inspect(oldKey)?.globalValue;
+    if (old === undefined) continue;
+    if (
+      key === "profiles" &&
+      !(Array.isArray(old) && old.every((p) => p && "label" in p))
+    )
+      continue;
+    const newKey = `claudeConfigSwitcher.${key}`;
+    if (config.inspect(newKey)?.globalValue === undefined) {
+      await config.update(newKey, old, vscode.ConfigurationTarget.Global);
+    }
+    try {
+      await config.update(oldKey, undefined, vscode.ConfigurationTarget.Global);
+    } catch {
+      // VS Code may refuse to write a key no extension registers; leaving it is harmless.
+    }
+  }
+}
+
 function activate(context) {
   state = context.globalState;
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  statusBar.command = "claudeProfileSwitcher.switch";
+  statusBar.command = "claudeConfigSwitcher.switch";
   context.subscriptions.push(statusBar);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("claudeProfileSwitcher.switch", switchProfile),
-    vscode.commands.registerCommand("claudeProfileSwitcher.create", createProfile),
-    vscode.commands.registerCommand("claudeProfileSwitcher.delete", deleteProfile),
-    vscode.commands.registerCommand("claudeProfileSwitcher.setColor", setProfileColor)
+    vscode.commands.registerCommand("claudeConfigSwitcher.switch", switchProfile),
+    vscode.commands.registerCommand("claudeConfigSwitcher.create", createProfile),
+    vscode.commands.registerCommand("claudeConfigSwitcher.delete", deleteProfile),
+    vscode.commands.registerCommand("claudeConfigSwitcher.setColor", setProfileColor)
   );
 
   // Keep the status bar in sync if settings change by other means.
@@ -388,7 +443,7 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (
         e.affectsConfiguration(CC_SETTING) ||
-        e.affectsConfiguration("claudeProfileSwitcher")
+        e.affectsConfiguration("claudeConfigSwitcher")
       ) {
         updateStatusBar();
         syncColor();
@@ -396,8 +451,10 @@ function activate(context) {
     })
   );
 
-  updateStatusBar();
-  syncColor();
+  migrateSettings().finally(() => {
+    updateStatusBar();
+    syncColor();
+  });
 }
 
 function deactivate() {}

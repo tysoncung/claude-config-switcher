@@ -16,6 +16,21 @@ jump between separate Claude Code config directories / accounts.
   switcher picker.
 - An optional **color per profile**: while that profile is active the whole status
   bar is tinted, so you always know which account you are on.
+- The **integrated terminal follows along**: `claude` run in a new VS Code
+  terminal uses the same profile as the Claude Code panel.
+
+## How it differs from symlink-based switchers
+
+Some switchers repoint `~/.claude` as a symlink. That changes the config for
+every terminal and every Claude session on the machine, and does not work on
+Windows. This extension never touches `~/.claude` or your shell files:
+
+- it switches only through the official extension's
+  `claudeCode.environmentVariables` setting and VS Code's terminal env setting,
+  keeping any other variables you have there;
+- it works on macOS, Linux and Windows;
+- it asks before reloading the window, and only removes status bar colors it
+  wrote itself.
 
 ## Why a separate extension (not a patch)
 
@@ -30,7 +45,8 @@ extension sits beside it and drives it only through the supported
   **User settings**, never workspace `.vscode/settings.json`. This extension
   therefore always writes to User settings.
 - `CLAUDE_CONFIG_DIR` **must be an absolute path**. The official extension ignores
-  `~` and relative values. The switcher refuses non-absolute `configDir`s.
+  `~` and relative values, so the switcher expands a leading `~` for you and
+  refuses relative `configDir`s.
 - Switching takes effect after a **window reload** (the extension reads env vars
   when it launches Claude). The picker offers to reload for you.
 
@@ -94,16 +110,16 @@ cp ~/.claude/CLAUDE.md     ~/.claude-work/   # global instructions
 you want a different label or your folder lives somewhere other than
 `~/.claude-<name>`. Open your **User** settings JSON (`Cmd+Shift+P` then
 `Preferences: Open User Settings (JSON)`) and add the profile to
-`claudeProfileSwitcher.profiles`, using an absolute path:
+`claudeConfigSwitcher.profiles`:
 
 ```json
-"claudeProfileSwitcher.profiles": [
+"claudeConfigSwitcher.profiles": [
   { "label": "default", "configDir": "" },
-  { "label": "work",    "configDir": "/Users/you/.claude-work" }
+  { "label": "work",    "configDir": "~/.claude-work" }
 ]
 ```
 
-Do not use `~` here. The Claude Code extension ignores it.
+A leading `~` is expanded to your home folder before it is written.
 
 #### 4. Switch to it
 
@@ -127,10 +143,10 @@ directory in your home folder, labelled `<name>`. So `~/.claude-work` shows up
 as **work** with no setup.
 
 To rename a profile or point at a directory somewhere else, list it in
-`claudeProfileSwitcher.profiles`:
+`claudeConfigSwitcher.profiles`:
 
 ```json
-"claudeProfileSwitcher.profiles": [
+"claudeConfigSwitcher.profiles": [
   { "label": "default",  "configDir": "" },
   { "label": "personal", "configDir": "/Users/you/.claude-personal" },
   { "label": "work",     "configDir": "/Volumes/Work/claude-config" }
@@ -139,18 +155,25 @@ To rename a profile or point at a directory somewhere else, list it in
 
 Empty `configDir` means the built-in default (`~/.claude`). Discovered
 directories already listed here are not shown twice. Set
-`claudeProfileSwitcher.autoDiscover` to `false` to show only the profiles you
+`claudeConfigSwitcher.autoDiscover` to `false` to show only the profiles you
 list.
+
+Switching also sets `CLAUDE_CONFIG_DIR` in `terminal.integrated.env.<os>`, so
+new integrated terminals match the panel. Set `claudeConfigSwitcher.syncTerminal`
+to `false` if you manage that variable yourself.
+
+Settings were named `claudeProfileSwitcher.*` before 1.1.0. They are copied to
+`claudeConfigSwitcher.*` automatically on first start.
 
 ## Profile colors
 
 Run **`Claude Code: Set Profile Color`** (or **Set profile color...** in the
 switcher), pick a profile, then a preset, a custom hex value, or **No color**.
 New profiles are also asked for a color when created. Colors are stored in
-`claudeProfileSwitcher.colors`, keyed by profile label:
+`claudeConfigSwitcher.colors`, keyed by profile label:
 
 ```json
-"claudeProfileSwitcher.colors": { "work": "#c62828", "personal": "#2e7d32" }
+"claudeConfigSwitcher.colors": { "work": "#c62828", "personal": "#2e7d32" }
 ```
 
 The extension writes `statusBar.background` and a readable text color into
@@ -216,7 +239,7 @@ Users can install from the Marketplace, or download the `.vsix` from the
 Releases page and install it:
 
 ```bash
-code --install-extension claude-config-switcher-1.0.2.vsix
+code --install-extension claude-config-switcher-1.1.0.vsix
 ```
 
 You can also run the workflow by hand from the **Actions** tab. That builds the
