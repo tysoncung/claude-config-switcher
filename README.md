@@ -1,5 +1,8 @@
 # Claude Config Switcher
 
+[![VS Marketplace version](https://vsmarketplacebadges.dev/version-short/TysonCung.cc-config-switcher.svg)](https://marketplace.visualstudio.com/items?itemName=TysonCung.cc-config-switcher)
+[![VS Marketplace installs](https://vsmarketplacebadges.dev/installs-short/TysonCung.cc-config-switcher.svg)](https://marketplace.visualstudio.com/items?itemName=TysonCung.cc-config-switcher)
+
 A tiny companion VS Code extension that adds the profile-switching feature the
 official Claude Code extension doesn't have. It picks which `CLAUDE_CONFIG_DIR`
 Claude Code uses, so you can keep separate config directories / accounts and
@@ -9,7 +12,7 @@ use a different one in each window or project.
 
 ## Install
 
-From the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=tysoncung.cc-config-switcher):
+From the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=TysonCung.cc-config-switcher):
 search for **Claude Config Switcher** in the Extensions view, or run
 
 ```bash
