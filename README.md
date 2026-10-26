@@ -294,3 +294,9 @@ code --install-extension cc-config-switcher-1.2.2.vsix
 
 You can also run the workflow by hand from the **Actions** tab. That builds the
 `.vsix` as a downloadable artifact without creating a release.
+
+## Author
+
+Made by Tyson Cung:
+[GitHub](https://github.com/tysoncung) ·
+[LinkedIn](https://www.linkedin.com/in/tysoncung/)
