@@ -2,6 +2,7 @@
 
 [![VS Marketplace version](https://vsmarketplacebadges.dev/version-short/TysonCung.cc-config-switcher.svg)](https://marketplace.visualstudio.com/items?itemName=TysonCung.cc-config-switcher)
 [![VS Marketplace installs](https://vsmarketplacebadges.dev/installs-short/TysonCung.cc-config-switcher.svg)](https://marketplace.visualstudio.com/items?itemName=TysonCung.cc-config-switcher)
+[![Open VSX version](https://img.shields.io/open-vsx/v/tysoncung/cc-config-switcher?label=Open%20VSX)](https://open-vsx.org/extension/tysoncung/cc-config-switcher)
 
 A tiny companion VS Code extension that adds the profile-switching feature the
 official Claude Code extension doesn't have. It picks which `CLAUDE_CONFIG_DIR`
@@ -18,6 +19,10 @@ search for **Claude Config Switcher** in the Extensions view, or run
 ```bash
 code --install-extension tysoncung.cc-config-switcher
 ```
+
+In Cursor, Windsurf, VSCodium and other editors that use
+[Open VSX](https://open-vsx.org/extension/tysoncung/cc-config-switcher), search
+for **Claude Config Switcher** in the Extensions view.
 
 ## What it adds
 
@@ -288,18 +293,21 @@ version tag.
 
 3. The workflow checks that the tag matches `package.json`, packages the
    extension with `pnpm run package`, and creates a release with the `.vsix` attached and
-   auto-generated notes. If the `VSCE_PAT` repository secret is set, it also
-   publishes the same `.vsix` to the VS Code Marketplace.
+   auto-generated notes. It also publishes the same `.vsix` to the VS Code
+   Marketplace if the `VSCE_PAT` repository secret is set, and to Open VSX if
+   `OVSX_PAT` is set.
 
-Users can install from the Marketplace, or download the `.vsix` from the
-Releases page and install it:
+Users can install from the Marketplace or Open VSX, or download the `.vsix`
+from the Releases page and install it:
 
 ```bash
 code --install-extension cc-config-switcher-1.2.3.vsix
 ```
 
-You can also run the workflow by hand from the **Actions** tab. That builds the
-`.vsix` as a downloadable artifact without creating a release.
+You can also run the workflow by hand from the **Actions** tab. Leave **tag**
+empty to only build the `.vsix` as a downloadable artifact. Enter an existing
+tag such as `v1.2.3` to retry a release that failed partway: the GitHub Release
+and any store that already has that version are skipped.
 
 ## Author
 

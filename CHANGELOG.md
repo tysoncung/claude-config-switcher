@@ -11,13 +11,13 @@
   half-made folder, instead of failing with a generic error.
 - If VS Code can't save settings while migrating them (for example,
   `settings.json` has a syntax error), you now see an error instead of nothing.
-- First release on [Open VSX](https://open-vsx.org/extension/tysoncung/cc-config-switcher).
+- First release on [Open VSX](https://open-vsx.org/extension/tysoncung/cc-config-switcher),
+  for Cursor, Windsurf and VSCodium.
 
 ## 1.2.2
 
 - Listed in the AI category, with a gallery banner and a screenshot.
-- Also published to [Open VSX](https://open-vsx.org/extension/tysoncung/cc-config-switcher)
-  for Cursor, Windsurf and VSCodium.
+- Release workflow can publish to Open VSX (first published there in 1.2.3).
 
 ## 1.2.1
 
