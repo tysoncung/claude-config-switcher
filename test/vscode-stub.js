@@ -23,14 +23,22 @@ function memento() {
  * @param {object} opts.user initial User settings
  * @param {object} opts.workspace initial Workspace settings
  * @param {boolean} opts.trusted whether the workspace is trusted
+ * @param {string[]} opts.failing settings whose writes throw, like a broken settings.json
  */
-function load({ user = {}, workspace = {}, trusted = true, hasFolder = true } = {}) {
+function load({
+  user = {},
+  workspace = {},
+  trusted = true,
+  hasFolder = true,
+  failing = [],
+} = {}) {
   const listeners = [];
   const commands = {};
   const messages = [];
   const quickPicks = [];
   let nextPick;
   let nextQuickPick;
+  let nextInput;
 
   const fire = (key) => {
     for (const fn of listeners) fn({ affectsConfiguration: (s) => key.startsWith(s) });
@@ -55,6 +63,7 @@ function load({ user = {}, workspace = {}, trusted = true, hasFolder = true } = 
         const key = full(k);
         if (key.startsWith("claudeProfileSwitcher."))
           throw new Error("not a registered setting");
+        if (failing.includes(key)) throw new Error("settings.json has errors");
         const store = target === 2 ? workspace : user;
         if (v === undefined) delete store[key];
         else store[key] = v;
@@ -93,6 +102,7 @@ function load({ user = {}, workspace = {}, trusted = true, hasFolder = true } = 
         return statusBar;
       },
       showQuickPick: async (items) => nextPick?.(items),
+      showInputBox: async (opts) => nextInput?.(opts),
       createQuickPick() {
         const qp = {
           items: [],
@@ -180,6 +190,14 @@ function load({ user = {}, workspace = {}, trusted = true, hasFolder = true } = 
     /** Answer the next showQuickPick by item label. */
     pick(label) {
       nextPick = (items) => items.find((i) => i.label === label);
+    },
+    /** Answer every showQuickPick with fn(items). */
+    answer(fn) {
+      nextPick = fn;
+    },
+    /** Type value into the next input box. */
+    input(value) {
+      nextInput = () => value;
     },
     /** Accept a row of the switcher, or press one of its buttons ("project", "window", "global"). */
     switcher(match, button) {

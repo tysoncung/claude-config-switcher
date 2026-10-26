@@ -101,8 +101,11 @@ function getProfiles() {
   if (!cfg().get("autoDiscover", true)) return profiles;
 
   const known = new Set(profiles.map((p) => p.configDir));
+  const labels = new Set(profiles.map((p) => p.label));
   for (const p of discoverProfiles()) {
-    if (!known.has(p.configDir)) profiles.push(p);
+    // Profiles are picked by label, so a listed profile keeps its name and a
+    // discovered folder with the same name is left out.
+    if (!known.has(p.configDir) && !labels.has(p.label)) profiles.push(p);
   }
   return profiles;
 }
@@ -197,6 +200,12 @@ function updateStatusBar() {
   statusBar.backgroundColor = problems.length
     ? new vscode.ThemeColor("statusBarItem.warningBackground")
     : undefined;
+  // Tinting the whole bar would mean writing to the project's settings, so a
+  // window-only profile colors just this item.
+  statusBar.color =
+    !problems.length && applied.level === "window"
+      ? getColor(applied.profile.label)
+      : undefined;
   statusBar.show();
 }
 
@@ -251,17 +260,17 @@ async function writeTint(target, memento, color) {
 
 /**
  * User settings carry the global default's tint, so every window agrees on it.
- * A window on a project pin or window-only profile adds its own in workspace settings.
+ * A window on a project pin adds its own in workspace settings. A window-only
+ * profile writes nothing there (see updateStatusBar), and clears what 1.2 wrote.
  */
 async function syncColor() {
   const global = cfg().get("defaultProfile") || (AMBIENT ? undefined : "default");
   await writeTint(vscode.ConfigurationTarget.Global, ctx.globalState, getColor(global));
   if (hasFolder()) {
-    const own = applied.level === "project" || applied.level === "window";
     await writeTint(
       vscode.ConfigurationTarget.Workspace,
       ctx.workspaceState,
-      own ? getColor(applied.profile.label) : undefined
+      applied.level === "project" ? getColor(applied.profile.label) : undefined
     );
   }
 }
@@ -476,7 +485,14 @@ async function createProfile() {
 
   const label = name.trim();
   const configDir = path.join(home, `.claude-${label}`);
-  fs.mkdirSync(configDir, { recursive: true });
+  try {
+    // Not recursive: failing on an existing folder means the cleanup below
+    // only ever removes a folder made here.
+    fs.mkdirSync(configDir);
+  } catch (err) {
+    vscode.window.showErrorMessage(`Could not create ${configDir}: ${err.message}`);
+    return;
+  }
 
   const source = path.join(home, ".claude");
   const available = SHAREABLE.filter((f) => fs.existsSync(path.join(source, f)));
@@ -492,10 +508,19 @@ async function createProfile() {
         canPickMany: true,
       }
     );
-    for (const p of picks || []) {
-      fs.cpSync(path.join(source, p.label), path.join(configDir, p.label), {
-        recursive: true,
-      });
+    try {
+      for (const p of picks || []) {
+        fs.cpSync(path.join(source, p.label), path.join(configDir, p.label), {
+          recursive: true,
+        });
+      }
+    } catch (err) {
+      // Don't leave a half-copied profile behind.
+      fs.rmSync(configDir, { recursive: true, force: true });
+      vscode.window.showErrorMessage(
+        `Could not copy from ~/.claude into ${configDir}: ${err.message}`
+      );
+      return;
     }
   }
 
@@ -723,6 +748,12 @@ function activate(context) {
   updateStatusBar();
   migrateNamespace()
     .then(migrateGlobalSetting)
+    .catch((err) => {
+      // e.g. VS Code won't write settings.json while it has a syntax error.
+      vscode.window.showErrorMessage(
+        `Claude Config Switcher could not update your settings: ${err.message}`
+      );
+    })
     .finally(() => {
       // The migration only moved where the choice is stored, not the choice itself.
       if (sameTarget(resolve(), applied)) applied = resolve();

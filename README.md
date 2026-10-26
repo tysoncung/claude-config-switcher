@@ -198,7 +198,8 @@ To rename a profile or point at a directory somewhere else, list it in
 ```
 
 Empty `configDir` means the built-in default (`~/.claude`). Discovered
-directories already listed here are not shown twice. Set
+directories already listed here, or whose name a listed profile already uses,
+are not shown. Set
 `claudeConfigSwitcher.autoDiscover` to `false` to show only the profiles you
 list.
 
@@ -227,9 +228,11 @@ New profiles are also asked for a color when created. Colors are stored in
 
 The extension writes `statusBar.background` and a readable text color into
 `workbench.colorCustomizations`: the global default's color in your User
-settings, so all windows agree, and a pinned or window-only profile's color in
-the workspace settings. It only ever removes values it wrote itself, so your own
-color customizations are left alone. Give pinned profiles a color of their own:
+settings, so all windows agree, and a pinned profile's color in the workspace
+settings. It only ever removes values it wrote itself, so your own color
+customizations are left alone. A window-only profile writes nothing to the
+project: its color is applied to the switcher's status bar item instead of the
+whole bar. Give pinned profiles a color of their own:
 a pinned profile with no color shows the global default's tint. A theme-specific
 block such as `"[Default Dark Modern]": { ... }` in that setting takes priority
 over the tint.
@@ -292,7 +295,7 @@ Users can install from the Marketplace, or download the `.vsix` from the
 Releases page and install it:
 
 ```bash
-code --install-extension cc-config-switcher-1.2.2.vsix
+code --install-extension cc-config-switcher-1.2.3.vsix
 ```
 
 You can also run the workflow by hand from the **Actions** tab. That builds the

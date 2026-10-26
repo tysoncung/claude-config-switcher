@@ -2,7 +2,7 @@
   "name": "cc-config-switcher",
   "displayName": "Claude Config Switcher",
   "description": "Switch between Claude Code config directories (CLAUDE_CONFIG_DIR) from a status bar item.",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "publisher": "tysoncung",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -155,7 +155,7 @@
   "scripts": {
     "lint": "biome check .",
     "format": "biome check --write .",
-    "package": "vsce package --no-dependencies",
+    "package": "vsce package --no-dependencies --allow-star-activation",
     "test": "node --test test/*.test.js"
   },
   "packageManager": "pnpm@10.29.3",

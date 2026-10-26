@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.3
+
+- A window-only profile no longer writes its color into the project's
+  `.vscode/settings.json`. It colors the status bar item instead, and a tint
+  1.2 wrote there is removed.
+- A `~/.claude-<name>` folder is no longer listed when a profile you configured
+  already uses that name, so every profile in the switcher can be selected.
+- Creating a profile reports a failed copy from `~/.claude` and removes the
+  half-made folder, instead of failing with a generic error.
+- If VS Code can't save settings while migrating them (for example,
+  `settings.json` has a syntax error), you now see an error instead of nothing.
+- First release on [Open VSX](https://open-vsx.org/extension/tysoncung/cc-config-switcher).
+
 ## 1.2.2
 
 - Listed in the AI category, with a gallery banner and a screenshot.

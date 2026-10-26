@@ -1,5 +1,6 @@
 const { test, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { load, settle } = require("./vscode-stub");
@@ -21,6 +22,23 @@ const PROFILES = {
 beforeEach(() => {
   delete process.env[KEY];
 });
+
+/** Run fn with a throwaway home folder, so tests never touch the real one. */
+async function withHome(fn) {
+  const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "ccs-home-"));
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  try {
+    await fn(home);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+}
 
 test("global default sets the host env and terminal env, ~ expanded", async () => {
   const vs = load({
@@ -109,6 +127,130 @@ test("pin button writes the workspace setting and the pinned color", async () =>
     "#c62828"
   );
   assert.match(vs.messages.at(-1), /pinned to this project/);
+});
+
+test("window-only profile colors the status bar item, not the project's settings", async () => {
+  const vs = load({
+    user: {
+      ...PROFILES,
+      "claudeConfigSwitcher.colors": { personal: "#2e7d32", work: "#c62828" },
+      "claudeConfigSwitcher.defaultProfile": "work",
+    },
+  });
+  vs.activate();
+  await settle();
+
+  await vs.switcher((i) => i.label === "personal", "window");
+  assert.equal(vs.workspace["workbench.colorCustomizations"], undefined);
+  assert.equal(vs.statusBar.color, "#2e7d32");
+  assert.equal(
+    vs.user["workbench.colorCustomizations"]["statusBar.background"],
+    "#c62828"
+  );
+});
+
+test("the workspace tint 1.2 wrote for a window-only profile is cleared", async () => {
+  const tint = { "statusBar.background": "#2e7d32" };
+  const vs = load({
+    user: { ...PROFILES, "claudeConfigSwitcher.colors": { personal: "#2e7d32" } },
+    workspace: {
+      "workbench.colorCustomizations": { ...tint, "editor.background": "#000" },
+    },
+  });
+  vs.context.workspaceState.data.profile = "personal";
+  vs.context.workspaceState.data.ownedColors = tint;
+  vs.activate();
+  await settle();
+  assert.deepEqual(vs.workspace["workbench.colorCustomizations"], {
+    "editor.background": "#000",
+  });
+});
+
+test("a discovered folder doesn't shadow a listed profile with the same name", async () => {
+  await withHome(async (home) => {
+    fs.mkdirSync(path.join(home, ".claude-work"));
+    fs.mkdirSync(path.join(home, ".claude-extra"));
+    const vs = load({
+      user: { "claudeConfigSwitcher.profiles": [{ label: "work", configDir: ABS }] },
+    });
+    vs.activate();
+    await settle();
+
+    let shown;
+    vs.answer((items) => {
+      shown = items;
+    });
+    await vs.commands["claudeConfigSwitcher.setColor"]();
+    assert.deepEqual(
+      shown.map((i) => [i.label, i.profile.configDir]),
+      [
+        ["default", ""],
+        ["work", ABS],
+        ["extra", path.join(home, ".claude-extra")],
+      ]
+    );
+  });
+});
+
+/** Share settings.json, and pick No color. */
+const createAnswers = (items) =>
+  items.some((i) => "picked" in i)
+    ? items.filter((i) => i.picked)
+    : items.find((i) => i.hex === "");
+
+test("create profile copies the picked files into ~/.claude-<name>", async () => {
+  await withHome(async (home) => {
+    fs.mkdirSync(path.join(home, ".claude"));
+    fs.writeFileSync(path.join(home, ".claude", "settings.json"), "{}");
+    const vs = load();
+    vs.activate();
+    await settle();
+
+    vs.input("work");
+    vs.answer(createAnswers);
+    await vs.commands["claudeConfigSwitcher.create"]();
+    assert.ok(fs.existsSync(path.join(home, ".claude-work", "settings.json")));
+    assert.match(vs.messages.at(-1), /Created profile "work"/);
+  });
+});
+
+test("a failed copy into a new profile removes the half-made folder", async () => {
+  await withHome(async (home) => {
+    fs.mkdirSync(path.join(home, ".claude"));
+    fs.writeFileSync(path.join(home, ".claude", "settings.json"), "{}");
+    const vs = load();
+    vs.activate();
+    await settle();
+
+    vs.input("work");
+    vs.answer(createAnswers);
+    const { cpSync } = fs;
+    fs.cpSync = () => {
+      throw new Error("EACCES: permission denied");
+    };
+    try {
+      await vs.commands["claudeConfigSwitcher.create"]();
+    } finally {
+      fs.cpSync = cpSync;
+    }
+    assert.equal(fs.existsSync(path.join(home, ".claude-work")), false);
+    assert.match(vs.messages.at(-1), /^ERROR Could not copy .*EACCES/);
+  });
+});
+
+test("a settings write that fails during migration is reported", async () => {
+  const vs = load({
+    user: { ...PROFILES, "claudeCode.environmentVariables": [{ name: KEY, value: ABS }] },
+    failing: ["claudeCode.environmentVariables"],
+  });
+  vs.activate();
+  await settle();
+  assert.equal(process.env[KEY], ABS);
+  assert.ok(
+    vs.messages.some((m) =>
+      /^ERROR .*could not update your settings: settings\.json has errors/.test(m)
+    )
+  );
 });
 
 test("a change from another window is only pending until reload", async () => {
